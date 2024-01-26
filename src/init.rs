@@ -9,6 +9,7 @@ use std::time::SystemTime;
 
 use chrono::{Datelike, Utc};
 use confy::load_path;
+use humantime::Timestamp;
 use serde_derive::{Deserialize, Serialize};
 use simple_log::LogConfigBuilder;
 use structopt::StructOpt;
@@ -22,6 +23,7 @@ const DATE_TEMPLATE: &str = "%DATE%";
 
 const DEFAULT_FIRST_N: u64 = 100;
 
+/*#[serde_as]*/
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ConfigFile {
     pub global_verbose: u8,
@@ -45,8 +47,10 @@ pub struct ConfigFile {
     pub min_size: u64,
     pub max_size: u64,
 
-    pub min_datetime: Option<SystemTime>,
-    pub max_datetime: Option<SystemTime>,
+    pub min_createdate: String,
+    pub max_createdate: String,
+    pub min_moddate: String,
+    pub max_moddate: String,
 
     pub name_filter: String,
 
@@ -81,8 +85,10 @@ impl Default for ConfigFile {
             min_size: 0,
             max_size: 0,
 
-            min_datetime: None,
-            max_datetime: None,
+            min_createdate: "".to_string(),
+            max_createdate: "".to_string(),
+            min_moddate: "".to_string(),
+            max_moddate: "".to_string(),
 
             name_filter: "".to_string(),
 
@@ -175,13 +181,21 @@ pub struct Options {
     #[structopt(long = "max-size", default_value = "0")]
     pub max_size: u64,
 
-    /// Minimum date of files to be checked
-    #[structopt(long = "min-date", default_value = "")]
-    pub min_datetime: String,
+    /// Minimum create date of files to be checked
+    #[structopt(long = "min-create-date", default_value = "")]
+    pub min_createdate: String,
 
-    /// Maximum date of files to be checked
-    #[structopt(long = "max-date", default_value = "")]
-    pub max_datetime: String,
+    /// Maximum create date of files to be checked
+    #[structopt(long = "max-create-date", default_value = "")]
+    pub max_createdate: String,
+
+    /// Minimum modify date of files to be checked
+    #[structopt(long = "min-mod-date", default_value = "")]
+    pub min_moddate: String,
+
+    /// Maximum modify of files to be checked
+    #[structopt(long = "max-mod-date", default_value = "")]
+    pub max_moddate: String,
 
     /// File names filter
     #[structopt(long, default_value = "")]
@@ -234,8 +248,8 @@ pub fn init() -> Result<ConfigFile, confy::ConfyError> {
 
     cfg.show_options_only = options.show_options_only || cfg.show_options_only;
 
-    cfg.delete = options.delete || cfg.delete;
-    cfg.force_delete = options.force_delete || cfg.force_delete;
+    cfg.delete = (options.delete || cfg.delete) && !cfg.debug;
+    cfg.force_delete = (options.force_delete || cfg.force_delete) && cfg.delete;
 
     cfg.name = options.name || cfg.name;
     cfg.size = options.size || cfg.size;
@@ -262,9 +276,28 @@ pub fn init() -> Result<ConfigFile, confy::ConfyError> {
         s => s,
     };
 
-    cfg.max_size = match options.max_size {
-        0 => cfg.max_size,
-        s => s,
+    cfg.min_createdate = if options.min_createdate == "" {
+        cfg.min_createdate
+    } else {
+        options.min_createdate
+    };
+
+    cfg.max_createdate = if options.max_createdate == "" {
+        cfg.max_createdate
+    } else {
+        options.max_createdate
+    };
+
+    cfg.min_moddate = if options.min_moddate == "" {
+        cfg.min_moddate
+    } else {
+        options.min_moddate
+    };
+
+    cfg.max_moddate = if options.max_moddate == "" {
+        cfg.max_moddate
+    } else {
+        options.max_moddate
     };
 
     cfg.first_n = match options.first_n {
@@ -321,4 +354,13 @@ pub fn init_log(log_filename: &String) -> Result<(), String> {
         .build();
 
     simple_log::new(log)
+}
+
+pub fn convert_string_to_system_time(s: &String, err_msg: &str) -> SystemTime {
+    match s.parse::<Timestamp>() {
+        Ok(ts) => *ts,
+        Err(e) => {
+            panic!("{} {} - {}", err_msg, s, e);
+        }
+    }
 }

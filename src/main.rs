@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::Read;
 use std::time::SystemTime;
 
-use init::{init_log, ConfigFile};
+use init::{convert_string_to_system_time, init_log, ConfigFile};
 use itertools::Itertools;
 use multimap::MultiMap;
 use sha2::{Digest, Sha512};
@@ -18,6 +18,42 @@ mod init;
 
 fn analyze(cfg: &ConfigFile) -> MultiMap<CheckOptions, String> {
     let mut files: MultiMap<check::CheckOptions, String> = MultiMap::new();
+
+    let min_create_date = if cfg.min_createdate == "" {
+        None
+    } else {
+        Some(convert_string_to_system_time(
+            &cfg.min_createdate,
+            "Can't parse min_createdate",
+        ))
+    };
+
+    let max_create_date = if cfg.max_createdate == "" {
+        None
+    } else {
+        Some(convert_string_to_system_time(
+            &cfg.max_createdate,
+            "Can't parse max_createdate",
+        ))
+    };
+
+    let min_mod_date = if cfg.min_moddate == "" {
+        None
+    } else {
+        Some(convert_string_to_system_time(
+            &cfg.min_moddate,
+            "Can't parse min_moddate",
+        ))
+    };
+
+    let max_mod_date = if cfg.max_moddate == "" {
+        None
+    } else {
+        Some(convert_string_to_system_time(
+            &cfg.max_moddate,
+            "Can't parse max_moddate",
+        ))
+    };
 
     for entry in WalkDir::new(
         cfg.path_start
@@ -49,7 +85,16 @@ fn analyze(cfg: &ConfigFile) -> MultiMap<CheckOptions, String> {
             file_name = Some(String::from(entry.file_name().to_string_lossy()));
         }
 
-        if cfg.size || cfg.date_created || cfg.date_modified {
+        if cfg.size
+            || cfg.date_created
+            || cfg.date_modified
+            || cfg.min_size > 0
+            || cfg.max_size > 0
+            || min_create_date.is_some()
+            || max_create_date.is_some()
+            || min_mod_date.is_some()
+            || max_mod_date.is_some()
+        {
             let file_metadata = match entry.metadata() {
                 Ok(m) => m,
                 Err(e) => {
@@ -60,6 +105,24 @@ fn analyze(cfg: &ConfigFile) -> MultiMap<CheckOptions, String> {
             file_size = Some(file_metadata.len());
             file_date_c = file_metadata.created().ok();
             file_date_m = file_metadata.modified().ok();
+
+            if (cfg.min_size > 0 && file_metadata.len() < cfg.min_size)
+                || (cfg.max_size > 0 && file_metadata.len() > cfg.max_size)
+                || (min_create_date.is_some()
+                    && file_date_c.is_some()
+                    && file_date_c.unwrap() > min_create_date.unwrap())
+                || (max_create_date.is_some()
+                    && file_date_c.is_some()
+                    && file_date_c.unwrap() < max_create_date.unwrap())
+                || (min_mod_date.is_some()
+                    && file_date_m.is_some()
+                    && file_date_m.unwrap() > min_mod_date.unwrap())
+                || (min_mod_date.is_some()
+                    && file_date_m.is_some()
+                    && file_date_m.unwrap() > min_mod_date.unwrap())
+            {
+                continue;
+            }
         }
 
         if cfg.hash_md5 || cfg.hash_sha512 {
