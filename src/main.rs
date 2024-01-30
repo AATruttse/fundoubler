@@ -8,16 +8,17 @@ use std::time::SystemTime;
 use init::{convert_string_to_system_time, init_log, ConfigFile};
 use itertools::Itertools;
 use multimap::MultiMap;
+use regex::Regex;
 use sha2::{Digest, Sha512};
 use walkdir::WalkDir;
 
-use crate::check::CheckOptions;
+use crate::check::{compare, CheckOptions};
 
 mod check;
 mod init;
 
-fn analyze(cfg: &ConfigFile) -> MultiMap<CheckOptions, String> {
-    let mut files: MultiMap<check::CheckOptions, String> = MultiMap::new();
+fn analyze(cfg: &ConfigFile) -> MultiMap<CheckOptions, CheckOptions> {
+    let mut files: MultiMap<check::CheckOptions, CheckOptions> = MultiMap::new();
 
     let min_create_date = if cfg.min_createdate == "" {
         None
@@ -55,6 +56,17 @@ fn analyze(cfg: &ConfigFile) -> MultiMap<CheckOptions, String> {
         ))
     };
 
+    let re = if cfg.name_filter == "" {
+        None
+    } else {
+        match Regex::new(cfg.name_filter.as_str()) {
+            Ok(r) => Some(r),
+            Err(e) => {
+                panic!("Can't parse filename filter from regexp {} - {}", cfg.name_filter, e);
+            }
+        }
+    };
+
     for entry in WalkDir::new(
         cfg.path_start
             .clone()
@@ -67,13 +79,12 @@ fn analyze(cfg: &ConfigFile) -> MultiMap<CheckOptions, String> {
     .filter_map(Result::ok)
     .filter(|e| !e.file_type().is_dir())
     {
-        let mut file_name: Option<String> = None;
-        let mut file_size: Option<u64> = None;
         let mut file_date_c: Option<SystemTime> = None;
         let mut file_date_m: Option<SystemTime> = None;
         let mut file_md5: Option<String> = None;
         let mut file_sha512: Option<String> = None;
 
+        let file_name = String::from(entry.file_name().to_string_lossy());
         let file_path = String::from(entry.path().to_string_lossy());
 
         if cfg.global_verbose > 0 {
@@ -81,48 +92,53 @@ fn analyze(cfg: &ConfigFile) -> MultiMap<CheckOptions, String> {
             println!("{}", &file_path);
         }
 
-        if cfg.name || cfg.global_verbose > 0 {
-            file_name = Some(String::from(entry.file_name().to_string_lossy()));
-        }
-
-        if cfg.size
-            || cfg.date_created
-            || cfg.date_modified
-            || cfg.min_size > 0
-            || cfg.max_size > 0
-            || min_create_date.is_some()
-            || max_create_date.is_some()
-            || min_mod_date.is_some()
-            || max_mod_date.is_some()
-        {
-            let file_metadata = match entry.metadata() {
-                Ok(m) => m,
-                Err(e) => {
-                    warn!("Can't get metadata for file {}. {}", &file_path, e);
-                    continue;
-                }
-            };
-            file_size = Some(file_metadata.len());
-            file_date_c = file_metadata.created().ok();
-            file_date_m = file_metadata.modified().ok();
-
-            if (cfg.min_size > 0 && file_metadata.len() < cfg.min_size)
-                || (cfg.max_size > 0 && file_metadata.len() > cfg.max_size)
-                || (min_create_date.is_some()
-                    && file_date_c.is_some()
-                    && file_date_c.unwrap() > min_create_date.unwrap())
-                || (max_create_date.is_some()
-                    && file_date_c.is_some()
-                    && file_date_c.unwrap() < max_create_date.unwrap())
-                || (min_mod_date.is_some()
-                    && file_date_m.is_some()
-                    && file_date_m.unwrap() > min_mod_date.unwrap())
-                || (min_mod_date.is_some()
-                    && file_date_m.is_some()
-                    && file_date_m.unwrap() > min_mod_date.unwrap())
-            {
+        let file_metadata = match entry.metadata() {
+            Ok(m) => m,
+            Err(e) => {
+                warn!("Can't get metadata for file {}. {}", &file_path, e);
                 continue;
             }
+        };
+
+        let mut file_opt : CheckOptions = CheckOptions::new();
+        file_opt.name = Some(file_path.clone());
+ 
+        file_opt.size = Some(file_metadata.len());
+        let file_size = if cfg.size {
+            file_opt.size
+        } else {
+            None
+        };
+
+        file_opt.created = file_metadata.created().ok();
+        if cfg.date_created {
+            file_date_c = file_opt.created;
+        };
+
+        file_opt.modified = file_metadata.modified().ok();
+        if cfg.date_modified {
+            file_date_m = file_opt.modified;
+        };        
+
+        if (cfg.min_size > 0 && file_metadata.len() < cfg.min_size)
+            || (cfg.max_size > 0 && file_metadata.len() > cfg.max_size)
+            || (min_create_date.is_some()
+                && file_date_c.is_some()
+                && file_date_c.unwrap() > min_create_date.unwrap())
+            || (max_create_date.is_some()
+                && file_date_c.is_some()
+                && file_date_c.unwrap() < max_create_date.unwrap())
+            || (min_mod_date.is_some()
+                && file_date_m.is_some()
+                && file_date_m.unwrap() > min_mod_date.unwrap())
+            || (max_mod_date.is_some()
+                && file_date_m.is_some()
+                && file_date_m.unwrap() > max_mod_date.unwrap())
+            || (re.is_some()
+                && !re.as_ref().unwrap().is_match(&file_name.as_str()) 
+            )
+        {
+            continue;
         }
 
         if cfg.hash_md5 || cfg.hash_sha512 {
@@ -153,7 +169,7 @@ fn analyze(cfg: &ConfigFile) -> MultiMap<CheckOptions, String> {
         }
 
         let file_key = check::CheckOptions {
-            name: file_name,
+            name: Some(file_name),
             size: file_size,
             created: file_date_c,
             modified: file_date_m,
@@ -161,17 +177,59 @@ fn analyze(cfg: &ConfigFile) -> MultiMap<CheckOptions, String> {
             sha512: file_sha512,
         };
 
-        files.insert(file_key, file_path);
+
+        files.insert(file_key, file_opt);
+    }
+
+    if cfg.debug {
+        println!("{:?}", files);
     }
 
     let vals = files
         .iter_all()
         .filter(|(_, v)| v.len() > 1)
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .sorted()
-        .collect::<Vec<(CheckOptions, Vec<String>)>>();
-    MultiMap::from_iter(vals)
+        .map(|(k, v)| (k.clone(), v.clone()
+            .into_iter()
+            .sorted_by(|v0, v1| compare(cfg, v0, v1)).collect()))
+        .sorted_by(|(k0, _), (k1, _)| compare(cfg, k0, k1));
+
+    if cfg.first_n > 0 {
+        return MultiMap::from_iter(vals.take(cfg.first_n).collect::<Vec<(CheckOptions, Vec<CheckOptions>)>>());
+    }
+    
+    MultiMap::from_iter(vals.collect::<Vec<(CheckOptions, Vec<CheckOptions>)>>())
 }
+
+fn show_results(results: &MultiMap<CheckOptions, CheckOptions>) {
+    for (opt, pathes) in results.iter_all() {
+        println!("{}", opt);
+        for path in pathes.iter() {
+            println!("    {}", path.name.clone().unwrap_or_default());
+        }
+    }
+}
+
+fn delete_results(cfg: &ConfigFile, results: &MultiMap<CheckOptions, CheckOptions>) {
+    if !cfg.delete {
+        return;
+    }
+
+    for (opt, pathes) in results.iter_all() {
+        let mut num_del: usize = 0;
+        let max_del = pathes.len() - 1;
+        
+        for path in pathes.iter() {
+            if num_del == max_del {
+                break;
+            }
+
+
+            println!("    {}", path);
+        }
+    }    
+
+}
+
 
 fn main() -> Result<(), String> {
     //let start = Instant::now();
@@ -202,6 +260,12 @@ fn main() -> Result<(), String> {
     }
 
     let file_doubles = analyze(&cfg);
-    println!("{:?}", file_doubles);
+    
+    if !cfg.silent_mode {
+        show_results(&file_doubles);
+    }
+
+
+
     Ok(())
 }

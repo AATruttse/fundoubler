@@ -21,7 +21,7 @@ const DEFAULT_OUT: &str = ".fundoubler%DATE%.res";
 const DEFAULT_LOG: &str = "./fundoubler%DATE%.log";
 const DATE_TEMPLATE: &str = "%DATE%";
 
-const DEFAULT_FIRST_N: u64 = 100;
+const DEFAULT_FIRST_N: usize = 100;
 
 /*#[serde_as]*/
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -54,7 +54,16 @@ pub struct ConfigFile {
 
     pub name_filter: String,
 
-    pub first_n: u64,
+    pub first_n: usize,
+
+    pub sort_res_name_asc: bool,
+    pub sort_res_name_desc: bool,
+    pub sort_res_size_asc: bool,
+    pub sort_res_size_desc: bool,
+    pub sort_res_cdate_asc: bool,
+    pub sort_res_cdate_desc: bool,
+    pub sort_res_mdate_asc: bool,
+    pub sort_res_mdate_desc: bool,
 
     pub path_start: Option<PathBuf>,
     pub out_filename: Option<PathBuf>,
@@ -93,6 +102,15 @@ impl Default for ConfigFile {
             name_filter: "".to_string(),
 
             first_n: DEFAULT_FIRST_N,
+
+            sort_res_name_asc: false,
+            sort_res_name_desc: false,
+            sort_res_size_asc: false,
+            sort_res_size_desc: false,
+            sort_res_cdate_asc: false,
+            sort_res_cdate_desc: false,
+            sort_res_mdate_asc: false,
+            sort_res_mdate_desc: false,            
 
             path_start: Some(PathBuf::from(DEFAULT_START)),
             out_filename: Some(PathBuf::from(DEFAULT_OUT)),
@@ -203,7 +221,39 @@ pub struct Options {
 
     /// First n files with maximum doubles to show
     #[structopt(short = "F", long = "first-n", default_value = "0")]
-    pub first_n: u64,
+    pub first_n: usize,
+
+    /// Sort results by name
+    #[structopt(long = "sort-name")]
+    pub sort_res_name_asc: bool,    
+
+    /// Sort results by name in reverse order
+    #[structopt(long = "sort-name-desc")]
+    pub sort_res_name_desc: bool,  
+
+    /// Sort results by size
+    #[structopt(long = "sort-size")]
+    pub sort_res_size_asc: bool,  
+
+    /// Sort results by size in reverse order
+    #[structopt(long = "sort-size-desc")]
+    pub sort_res_size_desc: bool,  
+
+    /// Sort results by create date
+    #[structopt(long = "sort-create")]
+    pub sort_res_cdate_asc: bool,  
+
+    /// Sort results by create date in reverse order
+    #[structopt(long = "sort-create-desc")]
+    pub sort_res_cdate_desc: bool,  
+
+    /// Sort results by name
+    #[structopt(long = "sort-mod")]
+    pub sort_res_mdate_asc: bool,  
+
+    /// Sort results by name
+    #[structopt(long = "sort-mod-desc")]
+    pub sort_res_mdate_desc: bool,                              
 
     /// Log file
     #[structopt(short, long, default_value = "")]
@@ -304,6 +354,31 @@ pub fn init() -> Result<ConfigFile, confy::ConfyError> {
         0 => cfg.first_n,
         s => s,
     };
+
+    cfg.sort_res_name_asc = options.sort_res_name_asc || cfg.sort_res_name_asc;
+    cfg.sort_res_name_desc = options.sort_res_name_desc || cfg.sort_res_name_desc;
+    cfg.sort_res_size_asc = options.sort_res_size_asc || cfg.sort_res_size_asc;
+    cfg.sort_res_size_desc = options.sort_res_size_desc || cfg.sort_res_size_desc;
+    cfg.sort_res_cdate_asc = options.sort_res_cdate_asc || cfg.sort_res_cdate_asc;
+    cfg.sort_res_cdate_desc = options.sort_res_cdate_desc || cfg.sort_res_cdate_desc;
+    cfg.sort_res_mdate_asc = options.sort_res_mdate_asc || cfg.sort_res_mdate_asc;
+    cfg.sort_res_mdate_desc = options.sort_res_mdate_desc || cfg.sort_res_mdate_desc;
+
+    if cfg.sort_res_name_asc && cfg.sort_res_name_desc {
+        panic!("Can't sort results by name in straight and reversed order simultaneously!");
+    }
+
+    if cfg.sort_res_size_asc && cfg.sort_res_size_desc {
+        panic!("Can't sort results by size in straight and reversed order simultaneously!");
+    }
+
+    if cfg.sort_res_cdate_asc && cfg.sort_res_cdate_desc {
+        panic!("Can't sort results by create date in straight and reversed order simultaneously!");
+    }
+
+    if cfg.sort_res_mdate_asc && cfg.sort_res_mdate_desc {
+        panic!("Can't sort results by modification date in straight and reversed order simultaneously!");
+    }
 
     cfg.name_filter = match options.name_filter.is_empty() {
         true => cfg.name_filter,
