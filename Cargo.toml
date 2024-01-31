@@ -8,11 +8,13 @@ edition = "2021"
 [dependencies]
 chrono          = "0.4"
 confy           = "0.6"
+dialoguer       = "0.11"
 hex-literal     = "0.4"
 humantime       = "2.1"
 itertools       = "0.12"
 md5             = "0.7"
 multimap        = "0.10"
+regex           = "1.8"
 serde           = { version = "1.0", features = ["derive"] }
 serde_derive    = "1.0"
 sha2            = "0.10"

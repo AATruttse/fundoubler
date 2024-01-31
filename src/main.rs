@@ -5,13 +5,14 @@ use std::fs::File;
 use std::io::Read;
 use std::time::SystemTime;
 
-use init::{convert_string_to_system_time, init_log, ConfigFile};
+use dialoguer::Confirm;
 use itertools::Itertools;
 use multimap::MultiMap;
 use regex::Regex;
 use sha2::{Digest, Sha512};
 use walkdir::WalkDir;
 
+use init::{convert_string_to_system_time, init_log, ConfigFile};
 use crate::check::{compare, CheckOptions};
 
 mod check;
@@ -214,17 +215,70 @@ fn delete_results(cfg: &ConfigFile, results: &MultiMap<CheckOptions, CheckOption
         return;
     }
 
-    for (opt, pathes) in results.iter_all() {
+    for (template, files) in results.iter_all() {
+        info!("{}", template);
+        if !cfg.silent_mode || !cfg.force_delete {
+            println!("{}", template);
+        }
+
         let mut num_del: usize = 0;
-        let max_del = pathes.len() - 1;
+        let mut idx_file: usize = 0;
+        let max_del = files.len() - 1;
         
-        for path in pathes.iter() {
-            if num_del == max_del {
-                break;
+        for file in files.iter() {
+            idx_file += 1;
+
+            print!("    {}...   ", file);
+            
+            if cfg.force_delete && idx_file == 1 {
+                info!("    {} - keep!", file);
+                if !cfg.silent_mode {
+                    println!("    keep!");
+                }
+                continue;
             }
 
+            if !cfg.force_delete {
+                if num_del == max_del ||
+                !Confirm::new()
+                .with_prompt("   delete (y/n)?")
+                .default(true)
+                .show_default(true)
+                .interact()
+                .unwrap() {
+                    info!("    {} - keep!", file);
+                    if !cfg.silent_mode {
+                        println!("    keep!");
+                        continue;
+                    }
+                }
+            }
 
-            println!("    {}", path);
+            if !cfg.silent_mode {
+                println!("    delete!");
+            }
+            info!("    {} - delete!", file);
+
+            let path_to_del = match &file.name {
+                Some(s) => s,
+                None => { 
+                    println!("Can't get path from {}", file);
+                    warn!("Can't get path from {}", file);
+                    continue;
+                }
+            };
+
+            if !cfg.debug {
+                match std::fs::remove_file(path_to_del) {
+                    Ok(_) => {
+                        num_del += 1;
+                    },
+                    Err(e) => {
+                        println!("Can't delete {} - {}", path_to_del, e);
+                        warn!("Can't delete {} - {}", path_to_del, e);
+                    }
+                }
+            }
         }
     }    
 
@@ -265,7 +319,9 @@ fn main() -> Result<(), String> {
         show_results(&file_doubles);
     }
 
-
-
+    if cfg.delete {
+        delete_results(&cfg, &file_doubles);
+    }
+    
     Ok(())
 }

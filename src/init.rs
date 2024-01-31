@@ -298,7 +298,7 @@ pub fn init() -> Result<ConfigFile, confy::ConfyError> {
 
     cfg.show_options_only = options.show_options_only || cfg.show_options_only;
 
-    cfg.delete = (options.delete || cfg.delete) && !cfg.debug;
+    cfg.delete = options.delete || cfg.delete;
     cfg.force_delete = (options.force_delete || cfg.force_delete) && cfg.delete;
 
     cfg.name = options.name || cfg.name;
