@@ -228,40 +228,47 @@ fn delete_results(cfg: &ConfigFile, results: &MultiMap<CheckOptions, CheckOption
         for file in files.iter() {
             idx_file += 1;
 
-            print!("    {}...   ", file);
+            println!("    {}...   ", file);
             
-            if cfg.force_delete && idx_file == 1 {
-                info!("    {} - keep!", file);
+            if cfg.force_delete {
                 if !cfg.silent_mode {
-                    println!("    keep!");
+                    print!("    {}...   ", file);
                 }
-                continue;
+                if idx_file == 1 {
+                    if !cfg.silent_mode {
+                        println!("keep!");
+                    }
+                    info!("    {} - keep!", file);
+                    continue;
+                }
             }
 
             if !cfg.force_delete {
-                if num_del == max_del ||
-                !Confirm::new()
-                .with_prompt("   delete (y/n)?")
-                .default(true)
-                .show_default(true)
-                .interact()
-                .unwrap() {
+                let prompt = format! {"    {} delete (y/n)?", file};
+
+                if num_del == max_del
+                    || !Confirm::new()
+                        .with_prompt(prompt)
+                        .default(true)
+                        .show_default(true)
+                        .interact()
+                        .unwrap()
+                {
                     info!("    {} - keep!", file);
-                    if !cfg.silent_mode {
-                        println!("    keep!");
-                        continue;
-                    }
+                    continue;
                 }
             }
 
-            if !cfg.silent_mode {
-                println!("    delete!");
+            if cfg.force_delete {
+                if !cfg.silent_mode {
+                    println!("delete!");
+                }
             }
             info!("    {} - delete!", file);
 
             let path_to_del = match &file.name {
                 Some(s) => s,
-                None => { 
+                None => {
                     println!("Can't get path from {}", file);
                     warn!("Can't get path from {}", file);
                     continue;
@@ -272,7 +279,7 @@ fn delete_results(cfg: &ConfigFile, results: &MultiMap<CheckOptions, CheckOption
                 match std::fs::remove_file(path_to_del) {
                     Ok(_) => {
                         num_del += 1;
-                    },
+                    }
                     Err(e) => {
                         println!("Can't delete {} - {}", path_to_del, e);
                         warn!("Can't delete {} - {}", path_to_del, e);
@@ -280,10 +287,8 @@ fn delete_results(cfg: &ConfigFile, results: &MultiMap<CheckOptions, CheckOption
                 }
             }
         }
-    }    
-
+    }
 }
-
 
 fn main() -> Result<(), String> {
     //let start = Instant::now();
@@ -314,7 +319,7 @@ fn main() -> Result<(), String> {
     }
 
     let file_doubles = analyze(&cfg);
-    
+
     if !cfg.silent_mode {
         show_results(&file_doubles);
     }
@@ -322,6 +327,6 @@ fn main() -> Result<(), String> {
     if cfg.delete {
         delete_results(&cfg, &file_doubles);
     }
-    
+
     Ok(())
 }

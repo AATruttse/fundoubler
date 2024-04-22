@@ -92,7 +92,7 @@ impl fmt::Display for CheckOptions {
         }
 
         if self.created.is_some() {
-            if first {
+            if !first {
                 print!(", ")
             }
 
@@ -102,7 +102,7 @@ impl fmt::Display for CheckOptions {
         }
 
         if self.modified.is_some() {
-            if first {
+            if !first {
                 print!(", ")
             }
 
@@ -112,7 +112,7 @@ impl fmt::Display for CheckOptions {
         }
 
         if self.md5.is_some() {
-            if first {
+            if !first {
                 print!(", ")
             }
             print!("MD5: {}",  &self.md5.as_ref().unwrap());
@@ -120,7 +120,7 @@ impl fmt::Display for CheckOptions {
         } 
 
         if self.sha512.is_some() {
-            if first {
+            if !first {
                 print!(", ")
             }
             print!("SHA512: {}",  &self.md5.as_ref().unwrap());

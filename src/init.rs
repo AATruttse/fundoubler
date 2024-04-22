@@ -423,7 +423,7 @@ pub fn init_log(log_filename: &String) -> Result<(), String> {
         .path(log_filename)
         .size(1 * 100)
         .roll_count(10)
-        .level("info")
+        .level("warn")
         .output_file()
         //.output_console()
         .build();
