@@ -1,7 +1,9 @@
-USAGE:
+Simple command line application for finding file duplicates. Author: Anton A. Truttse (Dargot) <dargot@yandex.ru>
+
+# USAGE:
     fundoubler.exe [FLAGS] [OPTIONS] [ARGS]
 
-FLAGS:
+## FLAGS:
     -t, --content              Check files by content
     -c, --date-created         Check files by datetime of creation
     -m, --date-modified        Check files by datetime of modification
@@ -29,7 +31,7 @@ FLAGS:
     -V, --version              Prints version information
     -v, --verbose              Verbose mode (-v, -vv, -vvv, etc.)
 
-OPTIONS:
+## OPTIONS:
         --defaults-file <configfile>          File with defaults config [default: ]
     -F, --first-n <first-n>                   First n files with maximum doubles to show [default: 0]
     -l, --log <log>                           Log file [default: ]
@@ -41,6 +43,12 @@ OPTIONS:
         --min-size <min-size>                 Minimum size of files to be checked [default: 0]
         --name-filter <name-filter>           File names filter [default: ]
 
-ARGS:
+## ARGS:
     <path-start>    start path, . if not present
     <out>           output path, stdout if not present
+
+# License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <https://www.apache.org/licenses/LICENSE-2.0>)
