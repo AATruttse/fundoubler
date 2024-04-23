@@ -22,8 +22,8 @@ Simple command line application for finding file duplicates. Author: Anton A. Tr
     -s, --size                 Check files by size
         --sort-create          Sort results by create date
         --sort-create-desc     Sort results by create date in reverse order
-        --sort-mod             Sort results by name
-        --sort-mod-desc        Sort results by name
+        --sort-mod             Sort results by mod date
+        --sort-mod-desc        Sort results by mod date in reverse order
         --sort-name            Sort results by name
         --sort-name-desc       Sort results by name in reverse order
         --sort-size            Sort results by size

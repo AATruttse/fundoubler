@@ -21,10 +21,16 @@ pub struct CheckOptions {
 
 impl CheckOptions {
     pub fn new() -> Self {
-        Self {name: None, size: None, created: None, modified: None, md5: None, sha512: None }
+        Self {
+            name: None,
+            size: None,
+            created: None,
+            modified: None,
+            md5: None,
+            sha512: None,
+        }
     }
 }
-
 
 pub fn compare(cfg: &ConfigFile, opt0: &CheckOptions, opt1: &CheckOptions) -> Ordering {
     if cfg.sort_res_name_asc || cfg.sort_res_name_desc {
@@ -36,7 +42,7 @@ pub fn compare(cfg: &ConfigFile, opt0: &CheckOptions, opt1: &CheckOptions) -> Or
         if cmp_name != Ordering::Equal {
             return cmp_name;
         }
-    } 
+    }
 
     if cfg.sort_res_size_asc || cfg.sort_res_size_desc {
         let cmp_size = if cfg.sort_res_size_asc {
@@ -47,7 +53,7 @@ pub fn compare(cfg: &ConfigFile, opt0: &CheckOptions, opt1: &CheckOptions) -> Or
         if cmp_size != Ordering::Equal {
             return cmp_size;
         }
-    } 
+    }
 
     if cfg.sort_res_cdate_asc || cfg.sort_res_cdate_desc {
         let cmp_cdate = if cfg.sort_res_cdate_asc {
@@ -58,7 +64,7 @@ pub fn compare(cfg: &ConfigFile, opt0: &CheckOptions, opt1: &CheckOptions) -> Or
         if cmp_cdate != Ordering::Equal {
             return cmp_cdate;
         }
-    } 
+    }
 
     if cfg.sort_res_mdate_asc || cfg.sort_res_mdate_desc {
         let cmp_mdate = if cfg.sort_res_mdate_asc {
@@ -69,69 +75,63 @@ pub fn compare(cfg: &ConfigFile, opt0: &CheckOptions, opt1: &CheckOptions) -> Or
         if cmp_mdate != Ordering::Equal {
             return cmp_mdate;
         }
-    } 
+    }
 
     return Ordering::Equal;
 }
 
 impl fmt::Display for CheckOptions {
-    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut first = true;
 
         if self.name.is_some() {
-            print!("{}",  &self.name.as_ref().unwrap());
+            write!(f, "{}", &self.name.as_ref().unwrap())?;
             first = false;
         }
 
         if self.size.is_some() {
             if !first {
-                print!(" - ")
+                write!(f, " - ")?;
             }
-            print!("{}",  &self.size.as_ref().unwrap());
+            write!(f, "{}", &self.size.as_ref().unwrap())?;
             first = false;
         }
 
         if self.created.is_some() {
             if !first {
-                print!(", ")
+                write!(f, ", ")?;
             }
 
             let datetime: DateTime<Utc> = self.created.unwrap().into();
-            print!("created: {}", datetime.format("%Y-%m-%d][%H:%M:%S"));
+            write!(f, "created: {}", datetime.format("%Y-%m-%d][%H:%M:%S"))?;
             first = false;
         }
 
         if self.modified.is_some() {
             if !first {
-                print!(", ")
+                write!(f, ", ")?;
             }
 
             let datetime: DateTime<Utc> = self.modified.unwrap().into();
-            print!("modified: {}", datetime.format("%Y-%m-%d][%H:%M:%S"));
+            write!(f, "modified: {}", datetime.format("%Y-%m-%d][%H:%M:%S"))?;
             first = false;
         }
 
         if self.md5.is_some() {
             if !first {
-                print!(", ")
+                write!(f, ", ")?;
             }
-            print!("MD5: {}",  &self.md5.as_ref().unwrap());
+            write!(f, "MD5: {}", &self.md5.as_ref().unwrap())?;
             first = false;
-        } 
+        }
 
         if self.sha512.is_some() {
             if !first {
-                print!(", ")
+                write!(f, ", ")?;
             }
-            print!("SHA512: {}",  &self.md5.as_ref().unwrap());
-        }                                                
+            write!(f, "SHA512: {}", &self.md5.as_ref().unwrap())?;
+        }
 
         Ok(())
     }
 }
-/* 
-impl CheckOptions {
-    fn origin(&self) -> Point {
-        Point { x: 0.0, y: 0.0 }
-    }
-}*/

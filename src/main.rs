@@ -1,8 +1,9 @@
 #[macro_use]
 extern crate simple_log;
 
+use std::cmp::Ordering;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::time::SystemTime;
 
 use dialoguer::Confirm;
@@ -13,6 +14,7 @@ use sha2::{Digest, Sha512};
 use walkdir::WalkDir;
 
 use init::{convert_string_to_system_time, init_log, ConfigFile};
+
 use crate::check::{compare, CheckOptions};
 
 mod check;
@@ -63,7 +65,10 @@ fn analyze(cfg: &ConfigFile) -> MultiMap<CheckOptions, CheckOptions> {
         match Regex::new(cfg.name_filter.as_str()) {
             Ok(r) => Some(r),
             Err(e) => {
-                panic!("Can't parse filename filter from regexp {} - {}", cfg.name_filter, e);
+                panic!(
+                    "Can't parse filename filter from regexp {} - {}",
+                    cfg.name_filter, e
+                );
             }
         }
     };
@@ -101,15 +106,11 @@ fn analyze(cfg: &ConfigFile) -> MultiMap<CheckOptions, CheckOptions> {
             }
         };
 
-        let mut file_opt : CheckOptions = CheckOptions::new();
+        let mut file_opt: CheckOptions = CheckOptions::new();
         file_opt.name = Some(file_path.clone());
- 
+
         file_opt.size = Some(file_metadata.len());
-        let file_size = if cfg.size {
-            file_opt.size
-        } else {
-            None
-        };
+        let file_size = if cfg.size { file_opt.size } else { None };
 
         file_opt.created = file_metadata.created().ok();
         if cfg.date_created {
@@ -119,7 +120,7 @@ fn analyze(cfg: &ConfigFile) -> MultiMap<CheckOptions, CheckOptions> {
         file_opt.modified = file_metadata.modified().ok();
         if cfg.date_modified {
             file_date_m = file_opt.modified;
-        };        
+        };
 
         if (cfg.min_size > 0 && file_metadata.len() < cfg.min_size)
             || (cfg.max_size > 0 && file_metadata.len() > cfg.max_size)
@@ -135,9 +136,7 @@ fn analyze(cfg: &ConfigFile) -> MultiMap<CheckOptions, CheckOptions> {
             || (max_mod_date.is_some()
                 && file_date_m.is_some()
                 && file_date_m.unwrap() > max_mod_date.unwrap())
-            || (re.is_some()
-                && !re.as_ref().unwrap().is_match(&file_name.as_str()) 
-            )
+            || (re.is_some() && !re.as_ref().unwrap().is_match(&file_name.as_str()))
         {
             continue;
         }
@@ -178,7 +177,6 @@ fn analyze(cfg: &ConfigFile) -> MultiMap<CheckOptions, CheckOptions> {
             sha512: file_sha512,
         };
 
-
         files.insert(file_key, file_opt);
     }
 
@@ -189,23 +187,153 @@ fn analyze(cfg: &ConfigFile) -> MultiMap<CheckOptions, CheckOptions> {
     let vals = files
         .iter_all()
         .filter(|(_, v)| v.len() > 1)
-        .map(|(k, v)| (k.clone(), v.clone()
-            .into_iter()
-            .sorted_by(|v0, v1| compare(cfg, v0, v1)).collect()))
+        .map(|(k, v)| {
+            (
+                k.clone(),
+                v.clone()
+                    .into_iter()
+                    .sorted_by(|v0, v1| compare(cfg, v0, v1))
+                    .collect(),
+            )
+        })
         .sorted_by(|(k0, _), (k1, _)| compare(cfg, k0, k1));
 
     if cfg.first_n > 0 {
-        return MultiMap::from_iter(vals.take(cfg.first_n).collect::<Vec<(CheckOptions, Vec<CheckOptions>)>>());
+        return MultiMap::from_iter(
+            vals.take(cfg.first_n)
+                .collect::<Vec<(CheckOptions, Vec<CheckOptions>)>>(),
+        );
     }
-    
+
     MultiMap::from_iter(vals.collect::<Vec<(CheckOptions, Vec<CheckOptions>)>>())
 }
 
-fn show_results(results: &MultiMap<CheckOptions, CheckOptions>) {
-    for (opt, pathes) in results.iter_all() {
+fn sort_results<'a>(
+    cfg: &'a ConfigFile,
+    results: &'a MultiMap<CheckOptions, CheckOptions>,
+) -> Vec<(&'a CheckOptions, &'a Vec<CheckOptions>)> {
+    let mut res_vec: Vec<(&CheckOptions, &Vec<CheckOptions>)> = results.iter_all().collect();
+
+    if cfg.sort_res_name_asc
+        || cfg.sort_res_name_desc
+        || cfg.sort_res_size_asc
+        || cfg.sort_res_size_desc
+        || cfg.sort_res_cdate_asc
+        || cfg.sort_res_cdate_desc
+        || cfg.sort_res_mdate_asc
+        || cfg.sort_res_mdate_desc
+    {
+        res_vec.sort_by(|(&ref opt1, _), (&ref opt2, _)| {
+            if cfg.sort_res_name_asc {
+                return opt1
+                    .name
+                    .as_ref()
+                    .unwrap()
+                    .partial_cmp(opt2.name.as_ref().unwrap())
+                    .unwrap();
+            } else if cfg.sort_res_name_desc {
+                return opt2
+                    .name
+                    .as_ref()
+                    .unwrap()
+                    .partial_cmp(&opt1.name.as_ref().unwrap())
+                    .unwrap();
+            } else if cfg.sort_res_size_asc {
+                return opt1.size.unwrap().partial_cmp(&opt2.size.unwrap()).unwrap();
+            } else if cfg.sort_res_size_desc {
+                return opt2.size.unwrap().partial_cmp(&opt1.size.unwrap()).unwrap();
+            } else if cfg.sort_res_cdate_asc {
+                return opt1
+                    .created
+                    .unwrap()
+                    .partial_cmp(&opt2.created.unwrap())
+                    .unwrap();
+            } else if cfg.sort_res_cdate_desc {
+                return opt2
+                    .created
+                    .unwrap()
+                    .partial_cmp(&opt1.created.unwrap())
+                    .unwrap();
+            } else if cfg.sort_res_mdate_asc {
+                return opt1
+                    .modified
+                    .unwrap()
+                    .partial_cmp(&opt2.modified.unwrap())
+                    .unwrap();
+            } else if cfg.sort_res_mdate_desc {
+                return opt2
+                    .modified
+                    .unwrap()
+                    .partial_cmp(&opt1.modified.unwrap())
+                    .unwrap();
+            }
+
+            Ordering::Equal
+        });
+    }
+
+    res_vec
+}
+
+fn show_results(res_vec: &Vec<(&CheckOptions, &Vec<CheckOptions>)>) {
+    for (opt, pathes) in res_vec {
         println!("{}", opt);
         for path in pathes.iter() {
             println!("    {}", path.name.clone().unwrap_or_default());
+        }
+        println!("");
+    }
+}
+
+fn print_results(cfg: &ConfigFile, res_vec: &Vec<(&CheckOptions, &Vec<CheckOptions>)>) {
+    if cfg.out_filename.is_none() {
+        return ();
+    }
+
+    let mut output = match File::create(cfg.out_filename.as_ref().unwrap()) {
+        Ok(file) => file,
+        Err(e) => {
+            panic!(
+                "Can't open file {}! {}",
+                cfg.out_filename.as_ref().unwrap().display(),
+                e
+            )
+        }
+    };
+
+    for (opt, pathes) in res_vec {
+        match writeln!(&mut output, "{}", opt) {
+            Ok(_) => {}
+            Err(e) => {
+                panic!(
+                    "Can't write to file {}! {}",
+                    cfg.out_filename.as_ref().unwrap().display(),
+                    e
+                )
+            }
+        }
+
+        for path in pathes.iter() {
+            match writeln!(&mut output, "    {}", path.name.clone().unwrap_or_default()) {
+                Ok(_) => {}
+                Err(e) => {
+                    panic!(
+                        "Can't write to file {}! {}",
+                        cfg.out_filename.as_ref().unwrap().display(),
+                        e
+                    )
+                }
+            }
+        }
+        match writeln!(&mut output, "") {
+            Ok(_) => {}
+            Err(e) => {
+                panic!(
+                    "Can't write to file {}! {}",
+                    cfg.out_filename.as_ref().unwrap().display(),
+                    e
+                )
+            }
         }
     }
 }
@@ -224,12 +352,12 @@ fn delete_results(cfg: &ConfigFile, results: &MultiMap<CheckOptions, CheckOption
         let mut num_del: usize = 0;
         let mut idx_file: usize = 0;
         let max_del = files.len() - 1;
-        
+
         for file in files.iter() {
             idx_file += 1;
 
             println!("    {}...   ", file);
-            
+
             if cfg.force_delete {
                 if !cfg.silent_mode {
                     print!("    {}...   ", file);
@@ -298,7 +426,7 @@ fn main() -> Result<(), String> {
         panic!("Can't init log file {}", &cfg.log_filename);
     }
 
-    if cfg.debug_config {
+    if cfg.debug_config || cfg.show_options_only {
         println!("Config options:");
         println!("{:#?}", cfg);
     }
@@ -319,9 +447,14 @@ fn main() -> Result<(), String> {
     }
 
     let file_doubles = analyze(&cfg);
+    let file_results = sort_results(&cfg, &file_doubles);
 
     if !cfg.silent_mode {
-        show_results(&file_doubles);
+        show_results(&file_results);
+    }
+
+    if cfg.out_filename.is_some() {
+        print_results(&cfg, &file_results);
     }
 
     if cfg.delete {

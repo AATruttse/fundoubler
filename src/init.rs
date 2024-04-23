@@ -110,7 +110,7 @@ impl Default for ConfigFile {
             sort_res_cdate_asc: false,
             sort_res_cdate_desc: false,
             sort_res_mdate_asc: false,
-            sort_res_mdate_desc: false,            
+            sort_res_mdate_desc: false,
 
             path_start: Some(PathBuf::from(DEFAULT_START)),
             out_filename: Some(PathBuf::from(DEFAULT_OUT)),
@@ -225,35 +225,35 @@ pub struct Options {
 
     /// Sort results by name
     #[structopt(long = "sort-name")]
-    pub sort_res_name_asc: bool,    
+    pub sort_res_name_asc: bool,
 
     /// Sort results by name in reverse order
     #[structopt(long = "sort-name-desc")]
-    pub sort_res_name_desc: bool,  
+    pub sort_res_name_desc: bool,
 
     /// Sort results by size
     #[structopt(long = "sort-size")]
-    pub sort_res_size_asc: bool,  
+    pub sort_res_size_asc: bool,
 
     /// Sort results by size in reverse order
     #[structopt(long = "sort-size-desc")]
-    pub sort_res_size_desc: bool,  
+    pub sort_res_size_desc: bool,
 
     /// Sort results by create date
     #[structopt(long = "sort-create")]
-    pub sort_res_cdate_asc: bool,  
+    pub sort_res_cdate_asc: bool,
 
     /// Sort results by create date in reverse order
     #[structopt(long = "sort-create-desc")]
-    pub sort_res_cdate_desc: bool,  
+    pub sort_res_cdate_desc: bool,
 
-    /// Sort results by name
+    /// Sort results by mod date
     #[structopt(long = "sort-mod")]
-    pub sort_res_mdate_asc: bool,  
+    pub sort_res_mdate_asc: bool,
 
-    /// Sort results by name
+    /// Sort results by mod date in reverse order
     #[structopt(long = "sort-mod-desc")]
-    pub sort_res_mdate_desc: bool,                              
+    pub sort_res_mdate_desc: bool,
 
     /// Log file
     #[structopt(short, long, default_value = "")]
@@ -392,17 +392,14 @@ pub fn init() -> Result<ConfigFile, confy::ConfyError> {
 
     cfg.out_filename = match options.out {
         None => cfg.out_filename,
-        Some(x) => {
-            let now = Utc::now();
-            let date_str = format!("{}{:02}{:02}", now.year(), now.month(), now.day());
-            Some(PathBuf::from(
-                x.into_os_string()
-                    .into_string()
-                    .unwrap()
-                    .replace(DATE_TEMPLATE, &date_str),
-            ))
-        }
+        Some(x) => Some(x)
     };
+
+    if cfg.out_filename.is_some() {
+        let now = Utc::now();
+        let date_str = format!("{}{:02}{:02}", now.year(), now.month(), now.day());
+        cfg.out_filename = Some(PathBuf::from(cfg.out_filename.unwrap().into_os_string().into_string().unwrap().replace(DATE_TEMPLATE, &date_str)));
+    }    
 
     cfg.log_filename = match options.log.is_empty() {
         true => cfg.log_filename,
