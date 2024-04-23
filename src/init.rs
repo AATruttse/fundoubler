@@ -392,14 +392,21 @@ pub fn init() -> Result<ConfigFile, confy::ConfyError> {
 
     cfg.out_filename = match options.out {
         None => cfg.out_filename,
-        Some(x) => Some(x)
+        Some(x) => Some(x),
     };
 
     if cfg.out_filename.is_some() {
         let now = Utc::now();
         let date_str = format!("{}{:02}{:02}", now.year(), now.month(), now.day());
-        cfg.out_filename = Some(PathBuf::from(cfg.out_filename.unwrap().into_os_string().into_string().unwrap().replace(DATE_TEMPLATE, &date_str)));
-    }    
+        cfg.out_filename = Some(PathBuf::from(
+            cfg.out_filename
+                .unwrap()
+                .into_os_string()
+                .into_string()
+                .unwrap()
+                .replace(DATE_TEMPLATE, &date_str),
+        ));
+    }
 
     cfg.log_filename = match options.log.is_empty() {
         true => cfg.log_filename,
