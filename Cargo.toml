@@ -1,23 +1,40 @@
 [package]
 name = "fundoubler"
-version = "0.1.0"
+version = "0.2.0"  # Updated version
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "A cross-platform utility for finding and removing file duplicates"
+authors = ["Anton A. Truttse (Dargot) <dargot@yandex.ru>"]
+license = "MIT"
+repository = "https://github.com/yourusername/fundoubler"
+readme = "README.md"
 
 [dependencies]
-chrono          = "0.4"
-confy           = "0.6"
-dialoguer       = "0.11"
-hex-literal     = "0.4"
-humantime       = "2.1"
-itertools       = "0.12"
-md5             = "0.7"
-multimap        = "0.10"
-regex           = "1.8"
-serde           = { version = "1.0", features = ["derive"] }
-serde_derive    = "1.0"
-sha2            = "0.10"
-simple-log      = "1.6"
-structopt       = "0.3"
-walkdir         = "2.4"
+chrono = "0.4.43"
+clap = { version = "4.0", features = ["derive", "env"] }  # Replaced structopt
+confy = "2.0.0"
+dialoguer = "0.12.0"
+indicatif = "0.18.3"  # For progress bars
+itertools = "0.14.0"
+md5 = "0.8.0"
+multimap = "0.10.1"
+rayon = "1.8"  # For parallel processing
+regex = "1.12.2"
+serde = { version = "1.0", features = ["derive"] }
+sha2 = "0.10.9"
+thiserror = "2.0.18"  # For better error handling
+walkdir = "2.5"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }  # Faster hashing
+
+[dev-dependencies]
+assert_fs = "1.0"
+tempfile = "3.6"
+criterion = "0.8.1"
+walkdir = "2.4"  # Для тестов тоже нужен
+
+[[bench]]
+name = "benchmarks"
+harness = false
+
+[profile.release]
+lto = true
+codegen-units = 1

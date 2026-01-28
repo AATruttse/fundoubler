@@ -1,0 +1,59 @@
+use assert_fs::TempDir;
+use std::fs;
+
+#[test]
+fn test_program_starts() {
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_fundoubler"))
+        .arg("--help")
+        .output()
+        .expect("Failed to execute process");
+    
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Basic smoke test: help output should mention the program name and be non-empty
+    assert!(
+        stdout.contains("fundoubler") && !stdout.is_empty(),
+        "Help output should mention program name, got: {}",
+        stdout
+    );
+}
+
+#[test]
+fn test_duplicate_detection_simple() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    // Создаем два одинаковых файла
+    let content = "identical content";
+    fs::write(temp_dir.path().join("file1.txt"), content).unwrap();
+    fs::write(temp_dir.path().join("file2.txt"), content).unwrap();
+    
+    // Запускаем с тестовым режимом
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_fundoubler"))
+        .env("TEST_MODE", "1")
+        .arg(temp_dir.path())
+        .arg("--md5")
+        .output()
+        .expect("Failed to execute process");
+    
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Программа должна завершиться успешно
+    assert!(
+        output.status.success(),
+        "Program should succeed, stderr: {}",
+        stderr
+    );
+
+    // Оба файла-дубликата должны быть упомянуты в выводе
+    assert!(
+        stdout.contains("file1.txt"),
+        "Output should mention file1.txt, got: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("file2.txt"),
+        "Output should mention file2.txt, got: {}",
+        stdout
+    );
+}
