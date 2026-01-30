@@ -41,7 +41,7 @@ impl FileScanner {
         // Collect all files first (this is IO bound)
         let entries: Vec<_> = WalkDir::new(&config.path_start)
             .into_iter()
-            .filter_map(|e| e.ok())  // Исправлено: было filter_map(Result::ok)
+            .filter_map(|e| e.ok())  // Fixed: was filter_map(Result::ok)
             .filter(|e| !e.file_type().is_dir())
             .collect();
         
@@ -95,7 +95,7 @@ impl FileScanner {
     
     fn process_file(&self, entry: &walkdir::DirEntry) -> Result<(CheckOptions, PathBuf)> {
         let path = entry.path().to_path_buf();
-        let metadata = entry.metadata()?;  // Исправлено: убрали map_err
+        let metadata = entry.metadata()?;  // Fixed: removed map_err
         
         // Apply filters
         if metadata.len() < self.config.min_size 

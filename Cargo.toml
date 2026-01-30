@@ -29,7 +29,7 @@ xxhash-rust = { version = "0.8", features = ["xxh3"] }  # Faster hashing
 assert_fs = "1.0"
 tempfile = "3.6"
 criterion = "0.8.1"
-walkdir = "2.4"  # Для тестов тоже нужен
+walkdir = "2.4"  # Also needed for tests
 
 [[bench]]
 name = "benchmarks"

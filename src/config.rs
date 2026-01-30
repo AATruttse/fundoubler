@@ -192,7 +192,7 @@ impl ConfigFile {
             config.limit = Some(limit);
         }
 
-        // Проверяем, не в тестовом ли окружении (через переменную среды)
+        // Check if we're in a test environment (via environment variable)
         config.test_mode = std::env::var("CARGO_TARGET_DIR").is_ok() 
             || std::env::var("TEST_MODE").is_ok();        
         

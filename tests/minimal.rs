@@ -22,12 +22,12 @@ fn test_program_starts() {
 fn test_duplicate_detection_simple() {
     let temp_dir = TempDir::new().unwrap();
     
-    // Создаем два одинаковых файла
+    // Create two identical files
     let content = "identical content";
     fs::write(temp_dir.path().join("file1.txt"), content).unwrap();
     fs::write(temp_dir.path().join("file2.txt"), content).unwrap();
     
-    // Запускаем с тестовым режимом
+    // Run with test mode
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_fundoubler"))
         .env("TEST_MODE", "1")
         .arg(temp_dir.path())
@@ -38,14 +38,14 @@ fn test_duplicate_detection_simple() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
-    // Программа должна завершиться успешно
+    // Program should complete successfully
     assert!(
         output.status.success(),
         "Program should succeed, stderr: {}",
         stderr
     );
 
-    // Оба файла-дубликата должны быть упомянуты в выводе
+    // Both duplicate files should be mentioned in output
     assert!(
         stdout.contains("file1.txt"),
         "Output should mention file1.txt, got: {}",

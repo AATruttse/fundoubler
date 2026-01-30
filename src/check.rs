@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 
 use chrono::{DateTime, Utc};
-use md5;  // Добавлено
+use md5;  // Added
 use serde::{Deserialize, Serialize};
 
 use crate::config::SortOrder;

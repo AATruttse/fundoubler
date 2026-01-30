@@ -14,7 +14,7 @@ use std::fs::File;
 use std::io::Write;
 use dialoguer::Confirm;
 
-/// Главная функция приложения
+/// Main application function
 pub fn run() -> Result<()> {
     // Parse CLI arguments
     let cli = CliOptions::parse();
@@ -123,7 +123,7 @@ fn handle_deletion(groups: &[FileGroup], config: &ConfigFile) -> Result<()> {
     if config.force_delete {
         println!("\nWARNING: Force delete enabled. Files will be deleted without confirmation!");
         
-        // В тестовом режиме пропускаем подтверждение
+        // Skip confirmation in test mode
         if !config.test_mode {
             if !Confirm::new()
                 .with_prompt("Are you absolutely sure?")
@@ -149,7 +149,7 @@ fn handle_deletion(groups: &[FileGroup], config: &ConfigFile) -> Result<()> {
                     group.paths[0].display()
                 );
                 
-                // В тестовом режиме автоматически отвечаем "нет"
+                // Automatically answer "no" in test mode
                 if !config.test_mode {
                     if !Confirm::new()
                         .with_prompt(&prompt)
@@ -160,7 +160,7 @@ fn handle_deletion(groups: &[FileGroup], config: &ConfigFile) -> Result<()> {
                         continue;
                     }
                 } else {
-                    // В тестовом режиме пропускаем удаление
+                    // Skip deletion in test mode
                     continue;
                 }
             }

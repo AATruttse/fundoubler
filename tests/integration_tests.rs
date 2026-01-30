@@ -6,7 +6,7 @@ use std::process::Command;
 /// Helper function to run fundoubler with arguments
 fn run_fundoubler(args: &[&str]) -> (String, String, std::process::ExitStatus) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_fundoubler"));
-    // Включаем тестовый режим, чтобы отключить интерактивные подтверждения dialoguer
+    // Enable test mode to disable interactive dialoguer confirmations
     cmd.env("TEST_MODE", "1");
     cmd.args(args);
     
@@ -28,16 +28,16 @@ fn create_test_file(dir: &TempDir, filename: &str, content: &str) {
 fn test_duplicates_by_md5_correct_files_identified() {
     let temp_dir = TempDir::new().unwrap();
     
-    // Создаем 4 файла:
-    // - file1.txt и file2.txt - одинаковое содержимое (дубликаты)
-    // - file3.txt - разное содержимое, но случайно такой же размер
-    // - file4.txt - совсем другое содержимое
+    // Create 4 files:
+    // - file1.txt and file2.txt - same content (duplicates)
+    // - file3.txt - different content, but accidentally same size
+    // - file4.txt - completely different content
     create_test_file(&temp_dir, "file1.txt", "identical content");
     create_test_file(&temp_dir, "file2.txt", "identical content");
-    create_test_file(&temp_dir, "file3.txt", "different but same size!!!"); // Такая же длина
+    create_test_file(&temp_dir, "file3.txt", "different but same size!!!"); // Same length
     create_test_file(&temp_dir, "file4.txt", "different");
     
-    // Проверяем по MD5 - должны найти только file1.txt и file2.txt как дубликаты
+    // Check by MD5 - should find only file1.txt and file2.txt as duplicates
     let (stdout, stderr, status) = run_fundoubler(&[
         temp_dir.path().to_str().unwrap(),
         "--md5",
@@ -49,7 +49,7 @@ fn test_duplicates_by_md5_correct_files_identified() {
         stderr
     );
     
-    // Должны быть найдены дубликаты и оба файла-дубликата должны упоминаться в выводе
+    // Duplicates should be found and both duplicate files should be mentioned in output
     assert!(
         stdout.contains("file1.txt"),
         "Output should mention file1.txt, got: {}",
@@ -63,14 +63,16 @@ fn test_duplicates_by_md5_correct_files_identified() {
 }
 
 #[test]
-fn test_size_only_compares_sizes_not_content() {
+fn test_size_and_hash_comparison() {
     let temp_dir = TempDir::new().unwrap();
     
-    // Создаем 3 файла одинакового размера (по 20 байт), но разного содержания
-    create_test_file(&temp_dir, "size1.txt", "12345678901234567890"); // 20 байт
-    create_test_file(&temp_dir, "size2.txt", "abcdefghijklmnopqrst"); // 20 байт
-    create_test_file(&temp_dir, "size3.txt", "09876543210987654321"); // 20 байт
-    create_test_file(&temp_dir, "different.txt", "short"); // 5 байт
+    // Create files with same size and content (will be duplicates)
+    // and files with same size but different content (won't be duplicates with hash comparison)
+    create_test_file(&temp_dir, "dup1.txt", "12345678901234567890"); // 20 bytes
+    create_test_file(&temp_dir, "dup2.txt", "12345678901234567890"); // 20 bytes (duplicate)
+    create_test_file(&temp_dir, "size_only1.txt", "abcdefghijklmnopqrst"); // 20 bytes, different content
+    create_test_file(&temp_dir, "size_only2.txt", "09876543210987654321"); // 20 bytes, different content
+    create_test_file(&temp_dir, "different.txt", "short"); // 5 bytes
     
     let (stdout, stderr, status) = run_fundoubler(&[
         temp_dir.path().to_str().unwrap(),
@@ -82,10 +84,24 @@ fn test_size_only_compares_sizes_not_content() {
         stderr
     );
     
-    // Проверяем, что программа корректно обработала файлы и что вывод осмысленный
+    // dup1 and dup2 should be found as duplicates (same size + hash)
     assert!(
-        !stdout.is_empty(),
-        "Expected non-empty stdout for duplicate scan"
+        stdout.contains("dup1.txt"),
+        "Output should mention dup1.txt, got: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("dup2.txt"),
+        "Output should mention dup2.txt, got: {}",
+        stdout
+    );
+    
+    // size_only files should not be together (different hash)
+    // different.txt should not be in duplicates
+    let has_size_only_group = stdout.contains("size_only1.txt") && stdout.contains("size_only2.txt");
+    assert!(
+        !has_size_only_group,
+        "Files with same size but different content should not be grouped together"
     );
 }
 
@@ -93,18 +109,18 @@ fn test_size_only_compares_sizes_not_content() {
 fn test_delete_keeps_first_file_in_group() {
     let temp_dir = TempDir::new().unwrap();
     
-    // Создаем 3 дубликата
+    // Create 3 duplicates
     create_test_file(&temp_dir, "keep_this.txt", "duplicate content");
     create_test_file(&temp_dir, "delete_this.txt", "duplicate content");
     create_test_file(&temp_dir, "also_delete.txt", "duplicate content");
     
-    // Запускаем с dry-run, чтобы посмотреть, что будет удалено
+    // Run with dry-run to see what would be deleted
     let (stdout, stderr, status) = run_fundoubler(&[
         temp_dir.path().to_str().unwrap(),
         "--md5",
         "--delete",
         "--dry-run",
-        "--sort=name", // Сортируем по имени для предсказуемости
+        "--sort=name", // Sort by name for predictability
     ]);
     
     assert!(
@@ -113,7 +129,7 @@ fn test_delete_keeps_first_file_in_group() {
         stderr
     );
     
-    // В dry-run режиме должны увидеть сообщение
+    // In dry-run mode should see message
     assert!(
         stdout.contains("DRY RUN"),
         "Dry-run marker should be present in stdout, got: {}",
@@ -130,28 +146,28 @@ fn test_delete_keeps_first_file_in_group() {
 fn test_actual_deletion_with_force() {
     let temp_dir = TempDir::new().unwrap();
     
-    // Создаем временную копию файлов для безопасного удаления
+    // Create temporary copy of files for safe deletion
     let file_to_keep = temp_dir.child("keep.txt");
     file_to_keep.write_str("content").unwrap();
     
     let file_to_delete = temp_dir.child("delete.txt");
     file_to_delete.write_str("content").unwrap();
     
-    // Убедимся, что оба файла существуют перед удалением
+    // Ensure both files exist before deletion
     assert!(file_to_keep.exists());
     assert!(file_to_delete.exists());
     
-    // Запускаем с симуляцией ответов для dialoguer
-    // Используем --force-delete чтобы избежать интерактивности
+    // Run with simulated responses for dialoguer
+    // Use --force-delete to avoid interactivity
     let (_stdout, stderr, status) = run_fundoubler(&[
         temp_dir.path().to_str().unwrap(),
         "--md5",
         "--delete",
         "--force-delete",
-        "--sort=name", // "delete.txt" идет раньше "keep.txt", так что "keep.txt" должен быть удален
+        "--sort=name", // "delete.txt" comes before "keep.txt", so "keep.txt" should be deleted
     ]);
     
-    // В режиме force-delete программа должна отработать без ошибок
+    // In force-delete mode program should complete without errors
     assert!(
         status.success(),
         "Force-delete run should succeed, stderr: {}",
@@ -163,10 +179,10 @@ fn test_actual_deletion_with_force() {
 fn test_multiple_groups_deletion() {
     let temp_dir = TempDir::new().unwrap();
     
-    // Создаем 2 группы дубликатов:
-    // Группа 1: a1.txt, a2.txt, a3.txt (одинаковое содержимое "group1")
-    // Группа 2: b1.txt, b2.txt (одинаковое содержимое "group2")
-    // Группа 3: unique.txt (уникальный файл)
+    // Create 2 groups of duplicates:
+    // Group 1: a1.txt, a2.txt, a3.txt (same content "group1")
+    // Group 2: b1.txt, b2.txt (same content "group2")
+    // Group 3: unique.txt (unique file)
     
     create_test_file(&temp_dir, "a1.txt", "group1");
     create_test_file(&temp_dir, "a2.txt", "group1");
@@ -177,14 +193,14 @@ fn test_multiple_groups_deletion() {
     
     create_test_file(&temp_dir, "unique.txt", "unique content");
     
-    // Считаем файлы до удаления
+    // Count files before deletion
     let files_before = std::fs::read_dir(temp_dir.path())
         .unwrap()
         .filter_map(Result::ok)
         .count();
-    assert_eq!(files_before, 6); // 6 файлов
+    assert_eq!(files_before, 6); // 6 files
     
-    // Запускаем с dry-run чтобы посмотреть план
+    // Run with dry-run to see the plan
     let (stdout, stderr, status) = run_fundoubler(&[
         temp_dir.path().to_str().unwrap(),
         "--md5",
@@ -199,7 +215,7 @@ fn test_multiple_groups_deletion() {
         stderr
     );
     
-    // Анализируем вывод и убеждаемся, что найдено несколько групп дубликатов
+    // Analyze output and verify that multiple duplicate groups were found
     let groups_found = stdout.lines().filter(|line| line.contains("Group")).count();
     assert!(
         groups_found >= 2,
@@ -210,21 +226,23 @@ fn test_multiple_groups_deletion() {
 }
 
 #[test]
-fn test_name_comparison_only_checks_filenames() {
+fn test_subdirectory_traversal() {
     let temp_dir = TempDir::new().unwrap();
     
-    // Создаем файлы с одинаковыми именами в разных папках
-    // Но разным содержимым - для проверки что сравниваются только имена
+    // Create files with same names in different folders
+    // With default criteria (size + xxh3) they won't be duplicates due to different content
     
     let subdir1 = temp_dir.path().join("dir1");
     let subdir2 = temp_dir.path().join("dir2");
     fs::create_dir_all(&subdir1).unwrap();
     fs::create_dir_all(&subdir2).unwrap();
     
-    fs::write(subdir1.join("common.txt"), "content1").unwrap();
-    fs::write(subdir2.join("common.txt"), "content2").unwrap(); // Другое содержимое!
+    // Create duplicates in different directories
+    fs::write(subdir1.join("common.txt"), "same content").unwrap();
+    fs::write(subdir2.join("common.txt"), "same content").unwrap(); // Duplicate!
     
-    create_test_file(&temp_dir, "different.txt", "content3");
+    // And a unique file
+    create_test_file(&temp_dir, "different.txt", "different content");
     
     let (stdout, stderr, status) = run_fundoubler(&[
         temp_dir.path().to_str().unwrap(),
@@ -232,35 +250,40 @@ fn test_name_comparison_only_checks_filenames() {
     
     assert!(
         status.success(),
-        "Program should succeed for name/size/hash defaults, stderr: {}",
+        "Program should succeed for subdirectory traversal, stderr: {}",
         stderr
     );
     
-    // Проверяем, что программа не падает и выдает какой-то результат
+    // common.txt from both directories should be found as duplicates
     assert!(
-        !stdout.is_empty(),
-        "Expected non-empty stdout for name-related scenario"
+        stdout.contains("common.txt"),
+        "Output should mention common.txt from subdirectories, got: {}",
+        stdout
+    );
+    
+    // Verify that program traverses subdirectories
+    assert!(
+        stdout.contains("dir1") || stdout.contains("dir2"),
+        "Output should show subdirectory paths"
     );
 }
 
 #[test]
-fn test_combined_criteria_size_and_name() {
+fn test_combined_criteria_size_and_hash() {
     let temp_dir = TempDir::new().unwrap();
     
-    // Тестируем комбинированные критерии
-    // Для теста: если использовать --size и --name, файлы должны совпадать по обоим критериям
-    // То есть должны иметь одинаковый размер И одинаковое имя
+    // Test combined criteria: size + hash
+    // Files must match both criteria to be duplicates
     
-    // Создаем файлы
-    create_test_file(&temp_dir, "root_file.txt", "content123"); // 11 байт
+    // Duplicates: same size and content
+    create_test_file(&temp_dir, "dup1.txt", "content123"); // 11 bytes
+    create_test_file(&temp_dir, "dup2.txt", "content123"); // 11 bytes (duplicate)
     
-    // Создаем в поддиректории файл с тем же именем и размером
-    let subdir = temp_dir.path().join("sub");
-    fs::create_dir_all(&subdir).unwrap();
-    fs::write(subdir.join("file.txt"), "content123").unwrap(); // 11 байт
+    // Only size matches, but content is different
+    create_test_file(&temp_dir, "size_match.txt", "same_size!!!"); // 11 bytes, different content
     
-    // Создаем файл с таким же размером, но другим именем
-    create_test_file(&temp_dir, "other.txt", "same_size!!!"); // 11 байт, но другое имя
+    // Different size
+    create_test_file(&temp_dir, "different.txt", "x"); // 1 byte
     
     let (stdout, stderr, status) = run_fundoubler(&[
         temp_dir.path().to_str().unwrap(),
@@ -272,58 +295,54 @@ fn test_combined_criteria_size_and_name() {
         stderr
     );
     
-    // Программа должна корректно обработать сценарий с различными именами/размерами.
+    // dup1 and dup2 should be found as duplicates
     assert!(
-        !stdout.is_empty(),
-        "Program should produce a meaningful result for combined criteria, got: {}",
+        stdout.contains("dup1.txt"),
+        "Output should mention dup1.txt, got: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("dup2.txt"),
+        "Output should mention dup2.txt, got: {}",
         stdout
     );
     
-    // Анализируем вывод
+    // size_match.txt should not be in group with dup1/dup2 (different content)
     let lines: Vec<&str> = stdout.lines().collect();
-    let mut _in_same_group = false;
-    let mut current_group = Vec::new();
+    let mut dup_group_has_size_match = false;
+    let mut in_dup_group = false;
     
     for line in lines {
         if line.contains("Group") {
-            if current_group.contains(&"file.txt") && current_group.contains(&"root_file.txt") {
-                _in_same_group = true;
-            }
-            current_group.clear();
+            in_dup_group = false;
         }
-        if line.contains("file.txt") && line.contains("sub") {
-            current_group.push("file.txt");
+        if line.contains("dup1.txt") || line.contains("dup2.txt") {
+            in_dup_group = true;
         }
-        if line.contains("root_file.txt") {
-            current_group.push("root_file.txt");
+        if in_dup_group && line.contains("size_match.txt") {
+            dup_group_has_size_match = true;
         }
     }
     
-    // Проверяем последнюю группу
-    if current_group.contains(&"file.txt") && current_group.contains(&"root_file.txt") {
-        _in_same_group = true;
-    }
-    
-    // root_file.txt и file.txt в subdir имеют разные имена, поэтому не должны быть в одной группе
-    // other.txt имеет другой размер? Нет, такой же размер, но другое имя - не должен совпадать с file.txt
-    // Так что, возможно, дубликатов не будет найдено вообще
-    // Проверяем хотя бы что программа выполнилась
-    assert!(status.success());
+    assert!(
+        !dup_group_has_size_match,
+        "Files with same size but different content should not be in same group"
+    );
 }
 
 #[test]
 fn test_min_size_filter_works_correctly() {
     let temp_dir = TempDir::new().unwrap();
     
-    // Создаем файлы разных размеров.
-    // Важно: делаем пары с одинаковым содержимым, чтобы они реально считались дубликатами
-    // при дефолтных критериях (size + xxh3).
-    create_test_file(&temp_dir, "small.txt", "abc"); // 3 байта
-    create_test_file(&temp_dir, "small2.txt", "abc"); // 3 байта (дубликат)
-    create_test_file(&temp_dir, "large.txt", "1234567890"); // 10 байт
-    create_test_file(&temp_dir, "large2.txt", "1234567890"); // 10 байт (дубликат)
+    // Create files of different sizes.
+    // Important: create pairs with same content so they are actually considered duplicates
+    // with default criteria (size + xxh3).
+    create_test_file(&temp_dir, "small.txt", "abc"); // 3 bytes
+    create_test_file(&temp_dir, "small2.txt", "abc"); // 3 bytes (duplicate)
+    create_test_file(&temp_dir, "large.txt", "1234567890"); // 10 bytes
+    create_test_file(&temp_dir, "large2.txt", "1234567890"); // 10 bytes (duplicate)
     
-    // Устанавливаем min-size=5, должны игнорировать small файлы
+    // Set min-size=5, should ignore small files
     let (stdout, stderr, status) = run_fundoubler(&[
         temp_dir.path().to_str().unwrap(),
         "--min-size=5",
@@ -335,7 +354,7 @@ fn test_min_size_filter_works_correctly() {
         stderr
     );
     
-    // small файлы должны быть отфильтрованы, а large — учитываться
+    // small files should be filtered out, large files should be included
     assert!(!stdout.contains("small.txt"));
     assert!(!stdout.contains("small2.txt"));
     assert!(stdout.contains("large.txt"));
@@ -346,13 +365,13 @@ fn test_min_size_filter_works_correctly() {
 fn test_max_size_filter_works_correctly() {
     let temp_dir = TempDir::new().unwrap();
     
-    // Создаем пары-дубликаты, чтобы вывод точно содержал имена файлов
-    create_test_file(&temp_dir, "small.txt", "abc"); // 3 байта
-    create_test_file(&temp_dir, "small2.txt", "abc"); // 3 байта (дубликат)
-    create_test_file(&temp_dir, "large.txt", "12345678901234567890"); // 20 байт
-    create_test_file(&temp_dir, "large2.txt", "12345678901234567890"); // 20 байт (дубликат)
+    // Create duplicate pairs so output definitely contains file names
+    create_test_file(&temp_dir, "small.txt", "abc"); // 3 bytes
+    create_test_file(&temp_dir, "small2.txt", "abc"); // 3 bytes (duplicate)
+    create_test_file(&temp_dir, "large.txt", "12345678901234567890"); // 20 bytes
+    create_test_file(&temp_dir, "large2.txt", "12345678901234567890"); // 20 bytes (duplicate)
     
-    // Устанавливаем max-size=10, должны игнорировать large файлы
+    // Set max-size=10, should ignore large files
     let (stdout, stderr, status) = run_fundoubler(&[
         temp_dir.path().to_str().unwrap(),
         "--max-size=10",
@@ -364,9 +383,507 @@ fn test_max_size_filter_works_correctly() {
         stderr
     );
     
-    // small файлы должны быть учтены, а large — отфильтрованы
+    // small files should be included, large files should be filtered out
     assert!(stdout.contains("small.txt"));
     assert!(stdout.contains("small2.txt"));
     assert!(!stdout.contains("large.txt"));
     assert!(!stdout.contains("large2.txt"));
+}
+
+#[test]
+fn test_sha512_hash_flag() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    create_test_file(&temp_dir, "file1.txt", "same content");
+    create_test_file(&temp_dir, "file2.txt", "same content");
+    create_test_file(&temp_dir, "file3.txt", "different content");
+    
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--sha512",
+    ]);
+    
+    assert!(
+        status.success(),
+        "SHA512-based run should succeed, stderr: {}",
+        stderr
+    );
+    
+    // file1 and file2 should be found as duplicates
+    assert!(stdout.contains("file1.txt"));
+    assert!(stdout.contains("file2.txt"));
+}
+
+#[test]
+fn test_xxh3_hash_flag() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    create_test_file(&temp_dir, "file1.txt", "same content");
+    create_test_file(&temp_dir, "file2.txt", "same content");
+    create_test_file(&temp_dir, "file3.txt", "different content");
+    
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--xxh3",
+    ]);
+    
+    assert!(
+        status.success(),
+        "XXH3-based run should succeed, stderr: {}",
+        stderr
+    );
+    
+    // file1 and file2 should be found as duplicates
+    assert!(stdout.contains("file1.txt"));
+    assert!(stdout.contains("file2.txt"));
+}
+
+#[test]
+fn test_content_flag_enables_all_hashes() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    create_test_file(&temp_dir, "file1.txt", "same content");
+    create_test_file(&temp_dir, "file2.txt", "same content");
+    
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--content",
+    ]);
+    
+    assert!(
+        status.success(),
+        "--content flag run should succeed, stderr: {}",
+        stderr
+    );
+    
+    // Duplicates should be found
+    assert!(stdout.contains("file1.txt"));
+    assert!(stdout.contains("file2.txt"));
+}
+
+#[test]
+fn test_filter_regex() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    // Create duplicates among different file types
+    create_test_file(&temp_dir, "image1.jpg", "duplicate");
+    create_test_file(&temp_dir, "image2.jpg", "duplicate");
+    create_test_file(&temp_dir, "doc1.pdf", "duplicate");
+    create_test_file(&temp_dir, "doc2.pdf", "duplicate");
+    
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--md5",
+        "--filter", ".*\\.jpg$",
+    ]);
+    
+    assert!(
+        status.success(),
+        "Filter regex run should succeed, stderr: {}",
+        stderr
+    );
+    
+    // Only jpg files should be found
+    assert!(stdout.contains("image1.jpg"));
+    assert!(stdout.contains("image2.jpg"));
+    assert!(!stdout.contains("doc1.pdf"));
+    assert!(!stdout.contains("doc2.pdf"));
+}
+
+#[test]
+fn test_sort_order() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    // Create files of different sizes to test sorting
+    create_test_file(&temp_dir, "small.txt", "x"); // 1 byte
+    create_test_file(&temp_dir, "small_copy.txt", "x"); // 1 byte
+    create_test_file(&temp_dir, "large.txt", "12345678901234567890"); // 20 bytes
+    create_test_file(&temp_dir, "large_copy.txt", "12345678901234567890"); // 20 bytes
+    
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--md5",
+        "--sort=size-desc",
+    ]);
+    
+    assert!(
+        status.success(),
+        "Sort order run should succeed, stderr: {}",
+        stderr
+    );
+    
+    // Verify that groups are ordered (large files should come first)
+    let stdout_lower = stdout.to_lowercase();
+    let large_pos = stdout_lower.find("large.txt").unwrap_or(0);
+    let small_pos = stdout_lower.find("small.txt").unwrap_or(stdout.len());
+    
+    assert!(
+        large_pos < small_pos,
+        "Large files should appear before small files with size-desc sort"
+    );
+}
+
+#[test]
+fn test_limit_option() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    // Create multiple duplicate groups
+    create_test_file(&temp_dir, "a1.txt", "group1");
+    create_test_file(&temp_dir, "a2.txt", "group1");
+    create_test_file(&temp_dir, "b1.txt", "group2");
+    create_test_file(&temp_dir, "b2.txt", "group2");
+    create_test_file(&temp_dir, "c1.txt", "group3");
+    create_test_file(&temp_dir, "c2.txt", "group3");
+    
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--md5",
+        "--limit=2",
+    ]);
+    
+    assert!(
+        status.success(),
+        "Limit option run should succeed, stderr: {}",
+        stderr
+    );
+    
+    // Number of groups should be limited
+    let group_count = stdout.lines().filter(|line| line.contains("Group")).count();
+    assert!(
+        group_count <= 2,
+        "Should limit to 2 groups, but found {} groups",
+        group_count
+    );
+}
+
+#[test]
+fn test_silent_mode() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    create_test_file(&temp_dir, "file1.txt", "same");
+    create_test_file(&temp_dir, "file2.txt", "same");
+    
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--md5",
+        "--silent",
+    ]);
+    
+    assert!(
+        status.success(),
+        "Silent mode run should succeed, stderr: {}",
+        stderr
+    );
+    
+    // In silent mode stdout should be empty
+    assert!(
+        stdout.trim().is_empty(),
+        "Silent mode should produce no output, got: {}",
+        stdout
+    );
+}
+
+#[test]
+fn test_verbose_mode() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    create_test_file(&temp_dir, "file1.txt", "same content");
+    create_test_file(&temp_dir, "file2.txt", "same content");
+    
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--md5",
+        "--verbose",
+    ]);
+    
+    assert!(
+        status.success(),
+        "Verbose mode run should succeed, stderr: {}",
+        stderr
+    );
+    
+    // Verbose mode should show additional information
+    assert!(
+        stdout.contains("Wasted space") || stdout.contains("file1.txt"),
+        "Verbose mode should show additional information"
+    );
+}
+
+#[test]
+fn test_output_file() {
+    let temp_dir = TempDir::new().unwrap();
+    let output_file = temp_dir.path().join("output.txt");
+    
+    create_test_file(&temp_dir, "file1.txt", "same content");
+    create_test_file(&temp_dir, "file2.txt", "same content");
+    
+    // output is a positional argument (second positional after path_start)
+    // Order: [FLAGS] <PATH_START> [OUTPUT]
+    let (_stdout, stderr, status) = run_fundoubler(&[
+        "--md5",
+        temp_dir.path().to_str().unwrap(),
+        output_file.to_str().unwrap(),
+    ]);
+    
+    assert!(
+        status.success(),
+        "Output file run should succeed, stderr: {}",
+        stderr
+    );
+    
+    // File should be created and contain results
+    assert!(
+        output_file.exists(),
+        "Output file should be created"
+    );
+    
+    let output_content = fs::read_to_string(&output_file).unwrap();
+    assert!(
+        output_content.contains("file1.txt") || output_content.contains("Duplicate"),
+        "Output file should contain duplicate information"
+    );
+}
+
+#[test]
+fn test_empty_directory() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    // Empty directory
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+    ]);
+    
+    assert!(
+        status.success(),
+        "Empty directory run should succeed, stderr: {}",
+        stderr
+    );
+    
+    // Should have message about no duplicates found
+    assert!(
+        stdout.contains("No duplicates") || stdout.contains("found"),
+        "Should handle empty directory gracefully, got: {}",
+        stdout
+    );
+}
+
+#[test]
+fn test_single_file_no_duplicates() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    create_test_file(&temp_dir, "unique.txt", "unique content");
+    
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--md5",
+    ]);
+    
+    assert!(
+        status.success(),
+        "Single file run should succeed, stderr: {}",
+        stderr
+    );
+    
+    // Should have message about no duplicates found
+    assert!(
+        stdout.contains("No duplicates"),
+        "Should report no duplicates for single file, got: {}",
+        stdout
+    );
+}
+
+#[test]
+fn test_invalid_path() {
+    // Test verifies that program doesn't panic on nonexistent path
+    // walkdir handles this gracefully by returning empty iterator
+    let (_stdout, _stderr, status) = run_fundoubler(&[
+        "/nonexistent/path/that/does/not/exist",
+    ]);
+    
+    // Main thing - program should complete (not panic)
+    // It may complete successfully (empty result) or with error
+    assert!(
+        status.code().is_some(),
+        "Program should complete without panicking for invalid path"
+    );
+}
+
+#[test]
+fn test_invalid_regex_filter() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    create_test_file(&temp_dir, "file1.txt", "content");
+    
+    // Test verifies that program doesn't panic on invalid regex
+    // Regex error may be handled in scanner.process_file and result
+    // in empty output, or program may exit with error
+    let (_stdout, _stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--filter", "[invalid regex",
+    ]);
+    
+    // Main thing - program should complete (not panic)
+    assert!(
+        status.code().is_some(),
+        "Program should complete without panicking for invalid regex"
+    );
+}
+
+#[test]
+fn test_verbose_level_2_shows_config() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    create_test_file(&temp_dir, "file1.txt", "same");
+    create_test_file(&temp_dir, "file2.txt", "same");
+    
+    let (stdout, stderr, status) = run_fundoubler(&[
+        "--md5",
+        temp_dir.path().to_str().unwrap(),
+        "--verbose",
+        "--verbose", // verbose = 2
+    ]);
+    
+    assert!(
+        status.success(),
+        "Verbose level 2 should succeed, stderr: {}",
+        stderr
+    );
+    
+    // verbose > 1 should show configuration debug output
+    assert!(
+        stdout.contains("Configuration:") || stdout.contains("path_start") || stdout.contains("compare_by"),
+        "Verbose level 2 should show config debug output, got: {}",
+        stdout
+    );
+}
+
+#[test]
+fn test_multiple_sort_orders_integration() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    // Create files with different sizes and names to test multiple sorting
+    create_test_file(&temp_dir, "z_large.txt", "12345678901234567890"); // 20 bytes
+    create_test_file(&temp_dir, "z_large_copy.txt", "12345678901234567890"); // 20 bytes
+    create_test_file(&temp_dir, "a_small.txt", "x"); // 1 byte
+    create_test_file(&temp_dir, "a_small_copy.txt", "x"); // 1 byte
+    
+    let (stdout, stderr, status) = run_fundoubler(&[
+        "--md5",
+        temp_dir.path().to_str().unwrap(),
+        "--sort=size-desc",
+        "--sort=name",
+    ]);
+    
+    assert!(
+        status.success(),
+        "Multiple sort orders should succeed, stderr: {}",
+        stderr
+    );
+    
+    // With size-desc then name sort, large files should come first,
+    // and within groups of same size - by name
+    let stdout_lower = stdout.to_lowercase();
+    let large_pos = stdout_lower.find("z_large").unwrap_or(0);
+    let small_pos = stdout_lower.find("a_small").unwrap_or(stdout.len());
+    
+    assert!(
+        large_pos < small_pos,
+        "With size-desc + name sort, large files should appear before small files"
+    );
+}
+
+#[test]
+fn test_name_desc_sort_order() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    create_test_file(&temp_dir, "a_first.txt", "content");
+    create_test_file(&temp_dir, "a_first_copy.txt", "content");
+    create_test_file(&temp_dir, "z_last.txt", "content");
+    create_test_file(&temp_dir, "z_last_copy.txt", "content");
+    
+    // --sort=name-desc is accepted; group order by name-desc only applies when
+    // compare_by_name is enabled (no CLI flag for that), so key.name is None
+    // and group order is undefined. We only verify the run succeeds and both
+    // groups appear.
+    let (stdout, stderr, status) = run_fundoubler(&[
+        "--md5",
+        temp_dir.path().to_str().unwrap(),
+        "--sort=name-desc",
+    ]);
+    
+    assert!(
+        status.success(),
+        "Name-desc sort should succeed, stderr: {}",
+        stderr
+    );
+    
+    let stdout_lower = stdout.to_lowercase();
+    assert!(
+        stdout_lower.contains("a_first") && stdout_lower.contains("z_last"),
+        "Both duplicate groups should appear in output"
+    );
+}
+
+#[test]
+fn test_summary_statistics() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    // Create multiple duplicate groups of different sizes
+    create_test_file(&temp_dir, "large1.txt", "12345678901234567890"); // 20 bytes
+    create_test_file(&temp_dir, "large2.txt", "12345678901234567890"); // 20 bytes
+    create_test_file(&temp_dir, "small1.txt", "x"); // 1 byte
+    create_test_file(&temp_dir, "small2.txt", "x"); // 1 byte
+    
+    let (stdout, stderr, status) = run_fundoubler(&[
+        "--md5",
+        temp_dir.path().to_str().unwrap(),
+    ]);
+    
+    assert!(
+        status.success(),
+        "Summary statistics test should succeed, stderr: {}",
+        stderr
+    );
+    
+    // Check for summary section
+    assert!(
+        stdout.contains("Summary:") || stdout.contains("Total duplicate groups"),
+        "Output should contain summary statistics"
+    );
+    
+    // Verify that groups and files are mentioned
+    assert!(
+        stdout.contains("group") || stdout.contains("Group") || stdout.contains("duplicate"),
+        "Output should mention duplicate groups"
+    );
+}
+
+#[test]
+fn test_wasted_space_calculation() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    // Create duplicates of known size to test wasted space calculation
+    let content_20_bytes = "12345678901234567890"; // 20 bytes
+    create_test_file(&temp_dir, "file1.txt", content_20_bytes);
+    create_test_file(&temp_dir, "file2.txt", content_20_bytes);
+    create_test_file(&temp_dir, "file3.txt", content_20_bytes); // 3 files = 2 duplicates
+    
+    let (stdout, stderr, status) = run_fundoubler(&[
+        "--md5",
+        temp_dir.path().to_str().unwrap(),
+        "--verbose", // Needed to show wasted space
+    ]);
+    
+    assert!(
+        status.success(),
+        "Wasted space calculation test should succeed, stderr: {}",
+        stderr
+    );
+    
+    // With verbose should show wasted space
+    // 3 files of 20 bytes each, 2 duplicates = 40 bytes wasted space
+    assert!(
+        stdout.contains("Wasted space") || stdout.contains("wasted") || stdout.contains("40"),
+        "Verbose output should show wasted space calculation"
+    );
 }

@@ -5,7 +5,7 @@ use std::process::Command;
 fn run_fundoubler(args: &[&str]) -> (String, String, std::process::ExitStatus) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_fundoubler"));
     
-    // Устанавливаем переменную среды для тестового режима
+    // Set environment variable for test mode
     cmd.env("TEST_MODE", "1");
     cmd.args(args);
     
@@ -21,7 +21,7 @@ fn run_fundoubler(args: &[&str]) -> (String, String, std::process::ExitStatus) {
 fn test_basic_duplicate_detection() {
     let temp_dir = TempDir::new().unwrap();
     
-    // Создаем дубликаты
+    // Create duplicates
     fs::write(temp_dir.path().join("file1.txt"), "same content").unwrap();
     fs::write(temp_dir.path().join("file2.txt"), "same content").unwrap();
     fs::write(temp_dir.path().join("unique.txt"), "different content").unwrap();
@@ -31,14 +31,14 @@ fn test_basic_duplicate_detection() {
         "--md5",
     ]);
     
-    // Программа должна завершиться успешно
+    // Program should complete successfully
     assert!(
         status.success(),
         "Program should succeed, stderr: {}",
         stderr
     );
 
-    // Оба файла-дубликата должны быть отображены в выводе
+    // Both duplicate files should be displayed in output
     assert!(
         stdout.contains("file1.txt"),
         "Output should mention file1.txt, got: {}",
@@ -65,21 +65,21 @@ fn test_dry_run_mode() {
         "--dry-run",
     ]);
     
-    // Программа должна завершиться успешно
+    // Program should complete successfully
     assert!(
         status.success(),
         "Program should succeed in dry-run mode, stderr: {}",
         stderr
     );
 
-    // Должно быть явное сообщение о dry-run
+    // Should have explicit dry-run message
     assert!(
         stdout.contains("DRY RUN"),
         "Dry run marker should be present in stdout, got: {}",
         stdout
     );
 
-    // Файлы не должны быть удалены в режиме dry-run
+    // Files should not be deleted in dry-run mode
     assert!(
         temp_dir.path().join("a.txt").exists(),
         "a.txt should not be deleted in dry-run mode"
@@ -94,24 +94,24 @@ fn test_dry_run_mode() {
 fn test_size_comparison() {
     let temp_dir = TempDir::new().unwrap();
     
-    // Создаем файлы одинакового размера и содержимого (чтобы они были дубликатами
-    // при дефолтных критериях: size + xxh3)
-    fs::write(temp_dir.path().join("size1.txt"), "12345").unwrap(); // 5 байт
-    fs::write(temp_dir.path().join("size2.txt"), "12345").unwrap(); // 5 байт (дубликат)
-    fs::write(temp_dir.path().join("diff.txt"), "1").unwrap(); // 1 байт
+    // Create files of same size and content (so they are duplicates
+    // with default criteria: size + xxh3)
+    fs::write(temp_dir.path().join("size1.txt"), "12345").unwrap(); // 5 bytes
+    fs::write(temp_dir.path().join("size2.txt"), "12345").unwrap(); // 5 bytes (duplicate)
+    fs::write(temp_dir.path().join("diff.txt"), "1").unwrap(); // 1 byte
     
     let (stdout, stderr, status) = run_fundoubler(&[
         temp_dir.path().to_str().unwrap(),
     ]);
     
-    // Программа должна завершиться успешно
+    // Program should complete successfully
     assert!(
         status.success(),
         "Program should succeed for size/hash comparison, stderr: {}",
         stderr
     );
 
-    // Файлы-дубликаты должны быть найдены
+    // Duplicate files should be found
     assert!(
         stdout.contains("size1.txt"),
         "Output should mention size1.txt, got: {}",
@@ -123,7 +123,7 @@ fn test_size_comparison() {
         stdout
     );
 
-    // Файл другого размера не должен появляться среди дубликатов
+    // File of different size should not appear among duplicates
     assert!(
         !stdout.contains("diff.txt") || stdout.contains("No duplicates"),
         "diff.txt should not be treated as duplicate: {}",

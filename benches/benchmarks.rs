@@ -1,7 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
 use fundoubler::check::calculate_hash;
-use std::fs::File;
-use std::io::Write;
+use std::time::Duration;
 use tempfile::NamedTempFile;
 
 fn create_test_file_of_size(size_mb: usize) -> NamedTempFile {
@@ -15,6 +14,11 @@ fn bench_hash_algorithms(c: &mut Criterion) {
     let mut group = c.benchmark_group("hash_algorithms");
     
     for size in [1, 10, 100].iter() {
+        // 100MB hashes are very slow; allow longer measurement time
+        if *size == 100 {
+            group.sample_size(10);
+            group.measurement_time(Duration::from_secs(60));
+        }
         let temp_file = create_test_file_of_size(*size);
         let path = temp_file.path().to_path_buf();
         
@@ -49,6 +53,17 @@ fn bench_duplicate_detection(c: &mut Criterion) {
     let mut group = c.benchmark_group("duplicate_detection");
     
     for file_count in [100, 1000, 5000].iter() {
+        // Allow longer measurement time for slow scans
+        if *file_count == 100 {
+            group.sample_size(30);
+            group.measurement_time(Duration::from_secs(20)); // ~16.3s needed for 30 samples
+        } else if *file_count == 1000 {
+            group.sample_size(10);
+            group.measurement_time(Duration::from_secs(40));
+        } else if *file_count == 5000 {
+            group.sample_size(10);
+            group.measurement_time(Duration::from_secs(90)); // ~85s needed for 10 samples
+        }
         group.bench_with_input(
             BenchmarkId::new("scan_files", format!("{} files", file_count)),
             file_count,
