@@ -95,6 +95,11 @@ impl FileScanner {
     
     fn process_file(&self, entry: &walkdir::DirEntry) -> Result<(CheckOptions, PathBuf)> {
         let path = entry.path().to_path_buf();
+
+        if self.config.verbose > 2 {
+            println!("{:#?}", path);
+        }
+
         let metadata = entry.metadata()?;  // Fixed: removed map_err
         
         // Apply filters
