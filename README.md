@@ -43,15 +43,17 @@ Run `fundoubler --help` for the full list of options.
 
 ### Comparison options (CLI)
 
-Default behavior compares by **size** and **XXH3** hash. You can override via CLI or config file.
+Default behavior compares by **size** and **XXH3** hash. You can add or override via CLI or config file. Multiple criteria can be combined; files must match on **all** enabled criteria to be considered duplicates.
 
+- **By name**: `fundoubler --name` or `-n`
+- **By size**: `fundoubler --size`
+- **By creation date**: `fundoubler --create-date`
+- **By last modified date**: `fundoubler --mod-date`
 - **By content (all hashes)**: `fundoubler --content`
 - **By MD5**: `fundoubler --md5`
 - **By SHA512**: `fundoubler --sha512`
 - **By XXH3 (fast)**: `fundoubler --xxh3`
-- **Combine**: `fundoubler --content --md5`
-
-Comparison by **name**, **created date**, or **modified date** is supported only via the config file (see below).
+- **Combine** (e.g. size AND name, or mod-date AND MD5): `fundoubler --size --name` or `fundoubler --mod-date --md5`
 
 ### Filtering options
 

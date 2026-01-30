@@ -509,6 +509,101 @@ fn test_config_from_cli_content_and_specific_hash() {
 }
 
 #[test]
+fn test_config_from_cli_comparison_flags() {
+    use clap::Parser;
+    use fundoubler::config::{CliOptions, ConfigFile};
+
+    // --name enables compare_by_name
+    let args = ["fundoubler", "--name"];
+    let cli = CliOptions::parse_from(args);
+    let config = ConfigFile::from_cli(&cli).expect("from_cli should succeed");
+    assert!(config.compare_by_name, "--name should enable compare_by_name");
+
+    // --size enables compare_by_size
+    let args = ["fundoubler", "--size"];
+    let cli = CliOptions::parse_from(args);
+    let config = ConfigFile::from_cli(&cli).expect("from_cli should succeed");
+    assert!(config.compare_by_size, "--size should enable compare_by_size");
+
+    // --create-date enables compare_by_created
+    let args = ["fundoubler", "--create-date"];
+    let cli = CliOptions::parse_from(args);
+    let config = ConfigFile::from_cli(&cli).expect("from_cli should succeed");
+    assert!(config.compare_by_created, "--create-date should enable compare_by_created");
+
+    // --mod-date enables compare_by_modified
+    let args = ["fundoubler", "--mod-date"];
+    let cli = CliOptions::parse_from(args);
+    let config = ConfigFile::from_cli(&cli).expect("from_cli should succeed");
+    assert!(config.compare_by_modified, "--mod-date should enable compare_by_modified");
+}
+
+#[test]
+fn test_config_from_cli_combined_comparison_size_and_name() {
+    use clap::Parser;
+    use fundoubler::config::{CliOptions, ConfigFile};
+
+    let args = ["fundoubler", "--size", "--name"];
+    let cli = CliOptions::parse_from(args);
+    let config = ConfigFile::from_cli(&cli).expect("from_cli should succeed");
+
+    assert!(config.compare_by_size, "size should be enabled");
+    assert!(config.compare_by_name, "name should be enabled");
+}
+
+#[test]
+fn test_config_from_cli_combined_comparison_mod_date_and_md5() {
+    use clap::Parser;
+    use fundoubler::config::{CliOptions, ConfigFile};
+
+    let args = ["fundoubler", "--mod-date", "--md5"];
+    let cli = CliOptions::parse_from(args);
+    let config = ConfigFile::from_cli(&cli).expect("from_cli should succeed");
+
+    assert!(config.compare_by_modified, "mod_date should be enabled");
+    assert!(config.compare_by_md5, "md5 should be enabled");
+}
+
+#[test]
+fn test_config_from_cli_combined_comparison_create_date_and_xxh3() {
+    use clap::Parser;
+    use fundoubler::config::{CliOptions, ConfigFile};
+
+    let args = ["fundoubler", "--create-date", "--xxh3"];
+    let cli = CliOptions::parse_from(args);
+    let config = ConfigFile::from_cli(&cli).expect("from_cli should succeed");
+
+    assert!(config.compare_by_created, "create_date should be enabled");
+    assert!(config.compare_by_xxh3, "xxh3 should be enabled");
+}
+
+#[test]
+fn test_config_from_cli_combined_comparison_three_way() {
+    use clap::Parser;
+    use fundoubler::config::{CliOptions, ConfigFile};
+
+    let args = ["fundoubler", "--name", "--size", "--md5"];
+    let cli = CliOptions::parse_from(args);
+    let config = ConfigFile::from_cli(&cli).expect("from_cli should succeed");
+
+    assert!(config.compare_by_name, "name should be enabled");
+    assert!(config.compare_by_size, "size should be enabled");
+    assert!(config.compare_by_md5, "md5 should be enabled");
+}
+
+#[test]
+fn test_config_from_cli_short_name_flag() {
+    use clap::Parser;
+    use fundoubler::config::{CliOptions, ConfigFile};
+
+    let args = ["fundoubler", "-n"];
+    let cli = CliOptions::parse_from(args);
+    let config = ConfigFile::from_cli(&cli).expect("from_cli should succeed");
+
+    assert!(config.compare_by_name, "-n should enable compare_by_name");
+}
+
+#[test]
 fn test_config_from_cli_config_file() {
     use clap::Parser;
     use fundoubler::config::{CliOptions, ConfigFile};

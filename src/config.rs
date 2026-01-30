@@ -71,6 +71,22 @@ pub struct CliOptions {
     #[arg(short = 't', long)]
     pub content: bool,
     
+    /// Check files by name
+    #[arg(short = 'n', long)]
+    pub name: bool,
+    
+    /// Check files by size
+    #[arg(long)]
+    pub size: bool,
+    
+    /// Check files by creation date
+    #[arg(long)]
+    pub create_date: bool,
+    
+    /// Check files by last modified date
+    #[arg(long)]
+    pub mod_date: bool,
+    
     /// Check files by MD5 hash
     #[arg(long)]
     pub md5: bool,
@@ -216,6 +232,18 @@ impl ConfigFile {
             config.compare_by_md5 = true;
             config.compare_by_sha512 = true;
             config.compare_by_xxh3 = true;
+        }
+        if cli.name {
+            config.compare_by_name = true;
+        }
+        if cli.size {
+            config.compare_by_size = true;
+        }
+        if cli.create_date {
+            config.compare_by_created = true;
+        }
+        if cli.mod_date {
+            config.compare_by_modified = true;
         }
         if cli.md5 {
             config.compare_by_md5 = true;

@@ -462,6 +462,64 @@ fn test_content_flag_enables_all_hashes() {
 }
 
 #[test]
+fn test_name_flag_finds_duplicates_by_name() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    // Same filename in different subdirs, same content -> duplicates when comparing by name
+    let sub1 = temp_dir.child("dir1");
+    sub1.create_dir_all().unwrap();
+    let sub2 = temp_dir.child("dir2");
+    sub2.create_dir_all().unwrap();
+    
+    sub1.child("common.txt").write_str("identical content").unwrap();
+    sub2.child("common.txt").write_str("identical content").unwrap();
+    
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--name",
+        "--md5",
+    ]);
+    
+    assert!(
+        status.success(),
+        "--name flag run should succeed, stderr: {}",
+        stderr
+    );
+    
+    assert!(stdout.contains("common.txt"));
+}
+
+#[test]
+fn test_combined_size_and_name_flags() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    // Two files with same name, same size, same content in subdirs
+    let sub1 = temp_dir.child("a");
+    sub1.create_dir_all().unwrap();
+    let sub2 = temp_dir.child("b");
+    sub2.create_dir_all().unwrap();
+    
+    let content = "same size and content";
+    sub1.child("dup.txt").write_str(content).unwrap();
+    sub2.child("dup.txt").write_str(content).unwrap();
+    
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--size",
+        "--name",
+        "--md5",
+    ]);
+    
+    assert!(
+        status.success(),
+        "--size --name --md5 run should succeed, stderr: {}",
+        stderr
+    );
+    
+    assert!(stdout.contains("dup.txt"));
+}
+
+#[test]
 fn test_filter_regex() {
     let temp_dir = TempDir::new().unwrap();
     
