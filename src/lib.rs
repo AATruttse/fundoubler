@@ -19,8 +19,8 @@ pub fn run() -> Result<()> {
     // Parse CLI arguments
     let cli = CliOptions::parse();
     
-    // Load configuration
-    let config = ConfigFile::from_cli(&cli);
+    // Load configuration (from --config file if set, then CLI overrides)
+    let config = ConfigFile::from_cli(&cli)?;
     
     // Validate configuration
     config.validate()?;

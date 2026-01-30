@@ -2,120 +2,118 @@
 
 A fast, cross-platform utility for finding and removing file duplicates written in Rust.
 
-## Featuress
+## Features
 
 - **Fast scanning**: Uses parallel processing for large directories
-- **Multiple comparison methods**: Size, name, dates, and various hash algorithms
-- **Smart filtering**: Filter by size, date, or name patterns
+- **Multiple comparison methods**: Size, name, dates, and various hash algorithms (MD5, SHA512, XXH3)
+- **Smart filtering**: Filter by size or name patterns (regex)
 - **Safe deletion**: Interactive confirmation or dry-run mode
 - **Progress reporting**: Visual progress bars for long operations
 - **Export results**: Save duplicate reports to files
+- **Configuration file**: TOML config with `--config`; CLI overrides file options
 - **Cross-platform**: Works on Windows, macOS, and Linux
 
+## Installation
 
-## USAGE:
-    fundoubler.exe [FLAGS] [OPTIONS] [ARGS]
+Build from source:
 
-# Basic usage
+```bash
+git clone https://github.com/AATruttse/fundoubler
+cd fundoubler
+cargo build --release
+```
 
-**Find duplicates in current directory**: fundoubler
-**Find duplicates in specific directory**: fundoubler /path/to/directory
-**Find duplicates by content (uses fast xxh3 hash by default)**: fundoubler --content /path/to/directory
-**Find duplicates and save results to file**: fundoubler /path/to/directory duplicates.txt
+## Usage
 
-# Comparison options
+```text
+fundoubler [OPTIONS] [PATH_START] [OUTPUT]
+```
 
-**Compare by file size (default)**: fundoubler --size
-**Compare by MD5 hash**: fundoubler --md5
-**Compare by SHA512 hash (more secure, slower)**: fundoubler --sha512
-**Compare by XXH3 hash (fast, recommended for large files)**: fundoubler --xxh3
-**Combine multiple criteria**: fundoubler --size --name --md5
+- **PATH_START**: Directory to scan (default: current directory `.`)
+- **OUTPUT**: Optional file to write results to (default: stdout)
 
-# Filtering options
+Run `fundoubler --help` for the full list of options.
 
-**Filter by size range**: fundoubler --min-size 1024 --max-size 1048576
-**Filter by name pattern (regex)**: fundoubler --filter ".*\.(jpg|png)$"
-**Limit number of results**: fundoubler --limit 10
+### Basic usage
 
-# Deletion options
+- **Find duplicates in current directory**: `fundoubler`
+- **Find duplicates in a directory**: `fundoubler /path/to/directory`
+- **Find duplicates by content (enables MD5, SHA512, XXH3)**: `fundoubler --content /path/to/directory`
+- **Save results to file**: `fundoubler /path/to/directory duplicates.txt`
 
-**Interactive deletion (safe)**: fundoubler --delete
-**Force delete without confirmation (DANGEROUS!)**: fundoubler --delete --force-delete
-**Dry run - see what would be deleted**: fundoubler --delete --dry-run
+### Comparison options (CLI)
 
-# Output control
+Default behavior compares by **size** and **XXH3** hash. You can override via CLI or config file.
 
-**Sort results**: fundoubler --sort size --sort name
-**Verbose output**: fundoubler -vvv
-**Silent mode (no output)**: fundoubler --silent
+- **By content (all hashes)**: `fundoubler --content`
+- **By MD5**: `fundoubler --md5`
+- **By SHA512**: `fundoubler --sha512`
+- **By XXH3 (fast)**: `fundoubler --xxh3`
+- **Combine**: `fundoubler --content --md5`
 
-## FLAGS:
-    -t, --content              Check files by content
-    -c, --date-created         Check files by datetime of creation
-    -m, --date-modified        Check files by datetime of modification
-        --debug                Debug
-        --debug-config         Show config options
-    -d, --delete               Delete unneeded doubles. Be careful!
-    -f, --force-delete         Force delete unneeded doubles. Be very careful!
-    -h, --hash                 Check files by MD5 and SHA512 hashes
-        --md5                  Check files by MD5 hash
-        --sha512               Check files by SHA512 hash
-        --help                 Prints help information
-        --hide-config          Hides config from debug show. Useful only .cfg file
-    -n, --name                 Check files by size
-        --show-options-only    Show options only - no real work
-    -S, --silent               Silent mode
-    -s, --size                 Check files by size
-        --sort-create          Sort results by create date
-        --sort-create-desc     Sort results by create date in reverse order
-        --sort-mod             Sort results by mod date
-        --sort-mod-desc        Sort results by mod date in reverse order
-        --sort-name            Sort results by name
-        --sort-name-desc       Sort results by name in reverse order
-        --sort-size            Sort results by size
-        --sort-size-desc       Sort results by size in reverse order
-    -V, --version              Prints version information
-    -v, --verbose              Verbose mode (-v, -vv, -vvv, etc.)
+Comparison by **name**, **created date**, or **modified date** is supported only via the config file (see below).
 
-## OPTIONS:
-        --defaults-file <configfile>          File with defaults config [default: ]
-    -F, --first-n <first-n>                   First n files with maximum doubles to show [default: 0]
-    -l, --log <log>                           Log file [default: ]
-        --max-create-date <max-createdate>    Maximum create date of files to be checked [default: ]
-        --max-mod-date <max-moddate>          Maximum modify of files to be checked [default: ]
-        --max-size <max-size>                 Maximum size of files to be checked [default: 0]
-        --min-create-date <min-createdate>    Minimum create date of files to be checked [default: ]
-        --min-mod-date <min-moddate>          Minimum modify date of files to be checked [default: ]
-        --min-size <min-size>                 Minimum size of files to be checked [default: 0]
-        --name-filter <name-filter>           File names filter [default: ]
+### Filtering options
 
-## ARGS:
-    <path-start>    start path, . if not present
-    <out>           output path, stdout if not present
+- **Size range (bytes)**: `fundoubler --min-size 1024 --max-size 1048576`
+- **Name pattern (regex)**: `fundoubler --filter ".*\.(jpg|png)$"`
+- **Limit groups shown**: `fundoubler --limit 10`
 
-## Configuration
+### Deletion options
 
-Fundoubler supports configuration files. Create fundoubler.toml
+- **Interactive deletion**: `fundoubler --delete`
+- **Force delete without confirmation (DANGEROUS)**: `fundoubler --delete --force-delete`
+- **Dry run (no deletions)**: `fundoubler --delete --dry-run`
 
-# Configuration file
+### Output control
 
-**Default comparison method**
+- **Sort order** (can repeat): `fundoubler --sort SizeDesc --sort Name`
+  - Values: `Name`, `NameDesc`, `Size`, `SizeDesc`, `Created`, `CreatedDesc`, `Modified`, `ModifiedDesc`
+- **Verbose**: `fundoubler -v` or `fundoubler -vv`
+- **Silent**: `fundoubler --silent`
+
+### Configuration file
+
+Use a TOML file to set defaults; CLI options override the file.
+
+**Example `fundoubler.toml`:**
+
+```toml
+path_start = "."
+
+# Comparison (at least one must be true)
 compare_by_xxh3 = true
 compare_by_size = true
+compare_by_name = false
+compare_by_created = false
+compare_by_modified = false
+compare_by_md5 = false
+compare_by_sha512 = false
 
-**Default filters**
-min_size = 1024  # 1KB minimum
-max_size = 1073741824  # 1GB maximum
+# Filters
+min_size = 1024
+max_size = 1073741824
+name_filter = ".*\\.(jpg|png)$"
 
-**Default sort order**
-sort_orders = ["size", "name"]
-
-**Always use dry-run mode for safety**
+# Output
+sort_orders = ["SizeDesc", "Name"]
+limit = 100
+verbose = 0
+silent = false
 dry_run = true
 
-# Use the config file:
+# Deletion
+delete = false
+force_delete = false
+```
 
+**Use the config file:**
+
+```bash
 fundoubler --config fundoubler.toml
+```
+
+If the config path is missing or invalid, the program exits with an error.
 
 ## License
 

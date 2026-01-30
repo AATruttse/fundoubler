@@ -220,7 +220,7 @@ fn test_config_combination_logic() {
     // Test 1: --content should enable all hash algorithms
     let args = ["fundoubler", "--content"];
     let cli = CliOptions::parse_from(args);
-    let config = ConfigFile::from_cli(&cli);
+    let config = ConfigFile::from_cli(&cli).expect("from_cli without config file should succeed");
     
     assert!(
         config.compare_by_md5 && config.compare_by_sha512 && config.compare_by_xxh3,
@@ -230,7 +230,7 @@ fn test_config_combination_logic() {
     // Test 2: --md5 should enable MD5 (other algorithms should not be enabled additionally)
     let args = ["fundoubler", "--md5"];
     let cli = CliOptions::parse_from(args);
-    let config = ConfigFile::from_cli(&cli);
+    let config = ConfigFile::from_cli(&cli).expect("from_cli without config file should succeed");
     
     assert!(config.compare_by_md5);
 }
@@ -484,7 +484,7 @@ fn test_config_from_cli_content_flag() {
     // --content should enable all three hash algorithms
     let args = ["fundoubler", "--content"];
     let cli = CliOptions::parse_from(args);
-    let config = ConfigFile::from_cli(&cli);
+    let config = ConfigFile::from_cli(&cli).expect("from_cli without config file should succeed");
     
     assert!(
         config.compare_by_md5 && config.compare_by_sha512 && config.compare_by_xxh3,
@@ -500,12 +500,91 @@ fn test_config_from_cli_content_and_specific_hash() {
     // --content + --md5: all hash algorithms should be enabled
     let args = ["fundoubler", "--content", "--md5"];
     let cli = CliOptions::parse_from(args);
-    let config = ConfigFile::from_cli(&cli);
+    let config = ConfigFile::from_cli(&cli).expect("from_cli without config file should succeed");
     
     assert!(
         config.compare_by_md5 && config.compare_by_sha512 && config.compare_by_xxh3,
         "--content should enable all hashes even when combined with specific hash flag"
     );
+}
+
+#[test]
+fn test_config_from_cli_config_file() {
+    use clap::Parser;
+    use fundoubler::config::{CliOptions, ConfigFile};
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("fundoubler.toml");
+    std::fs::write(
+        &config_path,
+        r#"
+path_start = "."
+compare_by_size = true
+compare_by_xxh3 = true
+compare_by_md5 = true
+min_size = 100
+max_size = 9999
+limit = 5
+"#,
+    )
+    .unwrap();
+
+    let args = ["fundoubler", "--config", config_path.to_str().unwrap()];
+    let cli = CliOptions::parse_from(args);
+    let config = ConfigFile::from_cli(&cli).expect("from_cli with valid config file should succeed");
+
+    assert!(config.compare_by_md5);
+    assert!(config.compare_by_size);
+    assert!(config.compare_by_xxh3);
+    assert_eq!(config.min_size, 100);
+    assert_eq!(config.max_size, 9999);
+    assert_eq!(config.limit, Some(5));
+}
+
+#[test]
+fn test_config_from_cli_config_file_cli_overrides() {
+    use clap::Parser;
+    use fundoubler::config::{CliOptions, ConfigFile};
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("fundoubler.toml");
+    std::fs::write(
+        &config_path,
+        r#"
+path_start = "."
+compare_by_size = true
+compare_by_xxh3 = true
+min_size = 100
+limit = 10
+"#,
+    )
+    .unwrap();
+
+    let args = [
+        "fundoubler",
+        "--config",
+        config_path.to_str().unwrap(),
+        "--min-size",
+        "200",
+        "--limit",
+        "3",
+    ];
+    let cli = CliOptions::parse_from(args);
+    let config = ConfigFile::from_cli(&cli).expect("from_cli with config file should succeed");
+
+    assert_eq!(config.min_size, 200, "CLI --min-size should override file");
+    assert_eq!(config.limit, Some(3), "CLI --limit should override file");
+}
+
+#[test]
+fn test_config_from_cli_config_file_missing_errors() {
+    use clap::Parser;
+    use fundoubler::config::{CliOptions, ConfigFile};
+
+    let args = ["fundoubler", "--config", "/nonexistent/fundoubler.toml"];
+    let cli = CliOptions::parse_from(args);
+    let result = ConfigFile::from_cli(&cli);
+    assert!(result.is_err(), "from_cli with missing config path should error");
 }
 
 #[test]

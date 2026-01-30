@@ -1,7 +1,49 @@
 use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::fs;
+
+/// Serialize PathBuf as string for TOML.
+fn path_buf_to_str<S>(p: &PathBuf, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    s.serialize_str(p.to_string_lossy().as_ref())
+}
+
+/// Deserialize a TOML string into PathBuf (TOML has no native path type).
+fn path_buf_from_str<'de, D>(d: D) -> Result<PathBuf, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(d)?;
+    Ok(PathBuf::from(s))
+}
+
+/// Serialize Option<PathBuf> as optional string for TOML.
+fn opt_path_buf_to_str<S>(p: &Option<PathBuf>, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match p {
+        Some(path) => s.serialize_some(path.to_string_lossy().as_ref()),
+        None => s.serialize_none(),
+    }
+}
+
+/// Deserialize Option<String> from TOML into Option<PathBuf>.
+fn opt_path_buf_from_str<'de, D>(d: D) -> Result<Option<PathBuf>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let opt = Option::<String>::deserialize(d)?;
+    Ok(opt.map(PathBuf::from))
+}
+
+fn default_path_start() -> PathBuf {
+    PathBuf::from(".")
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, ValueEnum, PartialEq)]
 pub enum SortOrder {
@@ -87,9 +129,12 @@ pub struct CliOptions {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ConfigFile {
-    // Core settings
+    // Core settings (custom de/serialize for TOML: paths are strings in file)
+    #[serde(default = "default_path_start", serialize_with = "path_buf_to_str", deserialize_with = "path_buf_from_str")]
     pub path_start: PathBuf,
+    #[serde(serialize_with = "opt_path_buf_to_str", deserialize_with = "opt_path_buf_from_str")]
     pub output: Option<PathBuf>,
     
     // Comparison criteria
@@ -148,55 +193,66 @@ impl Default for ConfigFile {
 }
 
 impl ConfigFile {
-    pub fn from_cli(cli: &CliOptions) -> Self {
-        let mut config = Self::default();
-        
-        // Core positional args
-        config.path_start = cli.path_start.clone();
-        config.output = cli.output.clone();
+    /// Build config from CLI. If `--config <path>` is set, load and merge that TOML file first (CLI overrides file).
+    pub fn from_cli(cli: &CliOptions) -> crate::error::Result<Self> {
+        let mut config = if let Some(path) = &cli.config {
+            let contents = fs::read_to_string(path).map_err(|e| {
+                crate::error::AppError::Config(format!("Failed to read config file '{}': {}", path.display(), e))
+            })?;
+            toml::from_str(&contents).map_err(|e| {
+                crate::error::AppError::Config(format!("Invalid config file '{}': {}", path.display(), e))
+            })?
+        } else {
+            Self::default()
+        };
 
-        // Merge CLI options with defaults
+        // Overlay CLI options (CLI overrides config file)
+        config.path_start = cli.path_start.clone();
+        if cli.output.is_some() {
+            config.output = cli.output.clone();
+        }
+
         if cli.content {
             config.compare_by_md5 = true;
             config.compare_by_sha512 = true;
             config.compare_by_xxh3 = true;
         }
-        
-        config.compare_by_md5 = cli.md5 || config.compare_by_md5;
-        config.compare_by_sha512 = cli.sha512 || config.compare_by_sha512;
-        config.compare_by_xxh3 = cli.xxh3 || config.compare_by_xxh3;
-        
+        if cli.md5 {
+            config.compare_by_md5 = true;
+        }
+        if cli.sha512 {
+            config.compare_by_sha512 = true;
+        }
+        if cli.xxh3 {
+            config.compare_by_xxh3 = true;
+        }
+
         config.delete = cli.delete;
         config.force_delete = cli.force_delete;
         config.dry_run = cli.dry_run;
         config.silent = cli.silent;
         config.verbose = if config.silent { 0 } else { cli.verbose };
-        
+
         if let Some(min) = cli.min_size {
             config.min_size = min;
         }
-        
         if let Some(max) = cli.max_size {
             config.max_size = max;
         }
-        
         if let Some(filter) = &cli.filter {
             config.name_filter = Some(filter.clone());
         }
-        
         if !cli.sort.is_empty() {
             config.sort_orders = cli.sort.clone();
         }
-        
         if let Some(limit) = cli.limit {
             config.limit = Some(limit);
         }
 
-        // Check if we're in a test environment (via environment variable)
-        config.test_mode = std::env::var("CARGO_TARGET_DIR").is_ok() 
-            || std::env::var("TEST_MODE").is_ok();        
-        
-        config
+        config.test_mode = std::env::var("CARGO_TARGET_DIR").is_ok()
+            || std::env::var("TEST_MODE").is_ok();
+
+        Ok(config)
     }
     
     pub fn validate(&self) -> crate::error::Result<()> {
