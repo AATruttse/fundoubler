@@ -519,11 +519,15 @@ fn test_config_from_cli_comparison_flags() {
     let config = ConfigFile::from_cli(&cli).expect("from_cli should succeed");
     assert!(config.compare_by_name, "--name should enable compare_by_name");
 
-    // --size enables compare_by_size
+    // --size enables compare_by_size only (no hashing - fast)
     let args = ["fundoubler", "--size"];
     let cli = CliOptions::parse_from(args);
     let config = ConfigFile::from_cli(&cli).expect("from_cli should succeed");
     assert!(config.compare_by_size, "--size should enable compare_by_size");
+    assert!(
+        !config.compare_by_xxh3 && !config.compare_by_md5 && !config.compare_by_sha512,
+        "--size alone should not enable hashing (keeps processing fast)"
+    );
 
     // --create-date enables compare_by_created
     let args = ["fundoubler", "--create-date"];

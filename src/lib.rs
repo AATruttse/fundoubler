@@ -18,6 +18,20 @@ use dialoguer::Confirm;
 pub fn run() -> Result<()> {
     // Parse CLI arguments
     let cli = CliOptions::parse();
+
+    // Create default config file and exit if requested
+    if let Some(path) = &cli.init_config {
+        let mut default_config = ConfigFile::default();
+        // TOML uses i64 for integers; u64::MAX overflows. Use a large but safe value.
+        default_config.max_size = i64::MAX as u64;
+        let toml = toml::to_string_pretty(&default_config)
+            .map_err(|e| AppError::Config(format!("Failed to serialize config: {}", e)))?;
+        std::fs::write(path, toml)?;
+        if !cli.silent {
+            println!("Created default config at {}", path.display());
+        }
+        return Ok(());
+    }
     
     // Load configuration (from --config file if set, then CLI overrides)
     let config = ConfigFile::from_cli(&cli)?;
@@ -191,8 +205,11 @@ fn calculate_wasted_space(groups: &[FileGroup]) -> Option<u64> {
     let mut total = 0u64;
     
     for group in groups {
-        if let Some(size) = group.key.size {
-            // Each group wastes (n-1) * size bytes
+        let size = group.key.size.or_else(|| {
+            // When not comparing by size, get size from first file for display
+            std::fs::metadata(&group.paths[0]).ok().map(|m| m.len())
+        }).unwrap_or(0);
+        if size > 0 && group.paths.len() > 1 {
             total += size * (group.paths.len() as u64 - 1);
         }
     }

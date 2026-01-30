@@ -78,41 +78,30 @@ Default behavior compares by **size** and **XXH3** hash. You can add or override
 
 Use a TOML file to set defaults; CLI options override the file.
 
-**Example `fundoubler.toml`:**
+**Create a default config file** (no need to write from scratch):
 
-```toml
-path_start = "."
-
-# Comparison (at least one must be true)
-compare_by_xxh3 = true
-compare_by_size = true
-compare_by_name = false
-compare_by_created = false
-compare_by_modified = false
-compare_by_md5 = false
-compare_by_sha512 = false
-
-# Filters
-min_size = 1024
-max_size = 1073741824
-name_filter = ".*\\.(jpg|png)$"
-
-# Output
-sort_orders = ["SizeDesc", "Name"]
-limit = 100
-verbose = 0
-silent = false
-dry_run = true
-
-# Deletion
-delete = false
-force_delete = false
+```bash
+fundoubler --init-config                    # Creates fundoubler.toml in current directory
+fundoubler --init-config /path/to/my.toml   # Creates config at specified path
 ```
 
-**Use the config file:**
+**Load and use the config file:**
 
 ```bash
 fundoubler --config fundoubler.toml
+```
+
+**Example structure** (run `--init-config` to generate a full template):
+
+```toml
+path_start = "."
+compare_by_xxh3 = true
+compare_by_size = true
+compare_by_name = false
+min_size = 0
+max_size = 1073741824
+sort_orders = ["SizeDesc", "Name"]
+dry_run = true
 ```
 
 If the config path is missing or invalid, the program exits with an error.

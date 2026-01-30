@@ -139,6 +139,10 @@ pub struct CliOptions {
     #[arg(long)]
     pub config: Option<PathBuf>,
     
+    /// Create a default config file and exit (default: fundoubler.toml)
+    #[arg(long, value_name = "PATH", num_args = 0..=1, default_missing_value = "fundoubler.toml")]
+    pub init_config: Option<PathBuf>,
+    
     /// Show only N groups of duplicates
     #[arg(long)]
     pub limit: Option<usize>,
@@ -178,6 +182,7 @@ pub struct ConfigFile {
     pub force_delete: bool,
     pub dry_run: bool,
 
+    #[serde(skip_serializing, default)]
     pub test_mode: bool
 }
 
@@ -228,31 +233,41 @@ impl ConfigFile {
             config.output = cli.output.clone();
         }
 
-        if cli.content {
-            config.compare_by_md5 = true;
-            config.compare_by_sha512 = true;
-            config.compare_by_xxh3 = true;
-        }
-        if cli.name {
-            config.compare_by_name = true;
-        }
-        if cli.size {
-            config.compare_by_size = true;
-        }
-        if cli.create_date {
-            config.compare_by_created = true;
-        }
-        if cli.mod_date {
-            config.compare_by_modified = true;
-        }
-        if cli.md5 {
-            config.compare_by_md5 = true;
-        }
-        if cli.sha512 {
-            config.compare_by_sha512 = true;
-        }
-        if cli.xxh3 {
-            config.compare_by_xxh3 = true;
+        // If user passed any comparison flag, use ONLY those (don't add to defaults).
+        // This makes e.g. `--size` fast (no hashing) instead of adding to size+xxh3.
+        let cli_specified_comparison = cli.name || cli.size || cli.create_date || cli.mod_date
+            || cli.content || cli.md5 || cli.sha512 || cli.xxh3;
+
+        if cli_specified_comparison {
+            config.compare_by_name = cli.name;
+            config.compare_by_size = cli.size;
+            config.compare_by_created = cli.create_date;
+            config.compare_by_modified = cli.mod_date;
+            if cli.content {
+                config.compare_by_md5 = true;
+                config.compare_by_sha512 = true;
+                config.compare_by_xxh3 = true;
+            } else {
+                config.compare_by_md5 = cli.md5;
+                config.compare_by_sha512 = cli.sha512;
+                config.compare_by_xxh3 = cli.xxh3;
+            }
+        } else {
+            // No CLI comparison flags: keep config file / default values, additive overlay
+            if cli.content {
+                config.compare_by_md5 = true;
+                config.compare_by_sha512 = true;
+                config.compare_by_xxh3 = true;
+            }
+            if cli.md5 {
+                config.compare_by_md5 = true;
+            }
+            if cli.sha512 {
+                config.compare_by_sha512 = true;
+            }
+            if cli.xxh3 {
+                config.compare_by_xxh3 = true;
+            }
         }
 
         config.delete = cli.delete;

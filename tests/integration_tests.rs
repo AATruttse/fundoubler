@@ -558,8 +558,10 @@ fn test_sort_order() {
     create_test_file(&temp_dir, "large.txt", "12345678901234567890"); // 20 bytes
     create_test_file(&temp_dir, "large_copy.txt", "12345678901234567890"); // 20 bytes
     
+    // Use --size --md5 so the key includes size for sort-by-size to work
     let (stdout, stderr, status) = run_fundoubler(&[
         temp_dir.path().to_str().unwrap(),
+        "--size",
         "--md5",
         "--sort=size-desc",
     ]);
@@ -751,6 +753,34 @@ fn test_single_file_no_duplicates() {
 }
 
 #[test]
+fn test_init_config_creates_default_file() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("my_config.toml");
+
+    let (stdout, stderr, status) = run_fundoubler(&[
+        "--init-config",
+        config_path.to_str().unwrap(),
+    ]);
+
+    assert!(
+        status.success(),
+        "--init-config should succeed, stderr: {}",
+        stderr
+    );
+
+    assert!(
+        config_path.exists(),
+        "Config file should be created"
+    );
+
+    let content = fs::read_to_string(&config_path).unwrap();
+    assert!(
+        content.contains("path_start") && content.contains("compare_by_size"),
+        "Config file should contain expected fields"
+    );
+}
+
+#[test]
 fn test_invalid_path() {
     // Test verifies that program doesn't panic on nonexistent path
     // walkdir handles this gracefully by returning empty iterator
@@ -825,7 +855,9 @@ fn test_multiple_sort_orders_integration() {
     create_test_file(&temp_dir, "a_small.txt", "x"); // 1 byte
     create_test_file(&temp_dir, "a_small_copy.txt", "x"); // 1 byte
     
+    // Use --size --md5 so the key includes size for sort-by-size to work
     let (stdout, stderr, status) = run_fundoubler(&[
+        "--size",
         "--md5",
         temp_dir.path().to_str().unwrap(),
         "--sort=size-desc",
@@ -838,7 +870,7 @@ fn test_multiple_sort_orders_integration() {
         stderr
     );
     
-    // With size-desc then name sort, large files should come first,
+    // With SizeDesc then Name sort, large files should come first,
     // and within groups of same size - by name
     let stdout_lower = stdout.to_lowercase();
     let large_pos = stdout_lower.find("z_large").unwrap_or(0);
