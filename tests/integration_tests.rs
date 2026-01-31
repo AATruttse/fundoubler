@@ -780,6 +780,179 @@ fn test_init_config_creates_default_file() {
 }
 
 #[test]
+fn test_hash_cache_creates_cache_file() {
+    let temp_dir = TempDir::new().unwrap();
+    let cache_dir = temp_dir.path().join("my_cache");
+    
+    create_test_file(&temp_dir, "a.txt", "same");
+    create_test_file(&temp_dir, "b.txt", "same");
+    
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--md5",
+        "--hash-cache",
+        "--hash-cache-dir",
+        cache_dir.to_str().unwrap(),
+    ]);
+    
+    assert!(
+        status.success(),
+        "Hash cache run should succeed, stderr: {}",
+        stderr
+    );
+    
+    let cache_file = cache_dir.join("cache.json");
+    assert!(
+        cache_file.exists(),
+        "Cache file should be created at {}",
+        cache_file.display()
+    );
+    
+    assert!(stdout.contains("a.txt") && stdout.contains("b.txt"));
+}
+
+#[test]
+fn test_hash_cache_second_run_uses_cache() {
+    let temp_dir = TempDir::new().unwrap();
+    let cache_dir = temp_dir.path().join("cache");
+
+    create_test_file(&temp_dir, "x.txt", "content");
+    create_test_file(&temp_dir, "y.txt", "content");
+
+    let (stdout1, stderr1, status1) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--md5",
+        "--hash-cache",
+        "--hash-cache-dir",
+        cache_dir.to_str().unwrap(),
+    ]);
+    assert!(status1.success(), "First run failed: {}", stderr1);
+
+    let (stdout2, stderr2, status2) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--md5",
+        "--hash-cache",
+        "--hash-cache-dir",
+        cache_dir.to_str().unwrap(),
+    ]);
+    assert!(status2.success(), "Second run failed: {}", stderr2);
+
+    assert!(stdout1.contains("x.txt") && stdout1.contains("y.txt"));
+    assert!(stdout2.contains("x.txt") && stdout2.contains("y.txt"));
+}
+
+#[test]
+fn test_hash_buffer_size_cli() {
+    let temp_dir = TempDir::new().unwrap();
+    create_test_file(&temp_dir, "a.txt", "x");
+    create_test_file(&temp_dir, "b.txt", "x");
+
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--md5",
+        "--hash-buffer-size",
+        "4096",
+    ]);
+    assert!(status.success(), "stderr: {}", stderr);
+    assert!(stdout.contains("a.txt"));
+}
+
+#[test]
+fn test_hash_cache_custom_dir() {
+    let temp_dir = TempDir::new().unwrap();
+    let custom_cache = temp_dir.path().join("custom_cache_dir");
+
+    create_test_file(&temp_dir, "a.txt", "same");
+    create_test_file(&temp_dir, "b.txt", "same");
+
+    let (_, stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--md5",
+        "--hash-cache",
+        "--hash-cache-dir",
+        custom_cache.to_str().unwrap(),
+    ]);
+    assert!(status.success(), "stderr: {}", stderr);
+    assert!(custom_cache.join("cache.json").exists());
+}
+
+#[test]
+fn test_hash_cache_via_config_file() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("fundoubler.toml");
+    let cache_dir = temp_dir.path().join("cache");
+    let path_str = temp_dir.path().to_str().unwrap().replace('\\', "/");
+    let cache_str = cache_dir.to_str().unwrap().replace('\\', "/");
+
+    std::fs::write(
+        &config_path,
+        format!(
+            r#"
+path_start = "{}"
+compare_by_size = true
+compare_by_xxh3 = true
+hash_cache = true
+hash_cache_dir = "{}"
+"#,
+            path_str, cache_str
+        ),
+    )
+    .unwrap();
+
+    create_test_file(&temp_dir, "f1.txt", "dup");
+    create_test_file(&temp_dir, "f2.txt", "dup");
+
+    let (stdout, stderr, status) = run_fundoubler(&[
+        "--config",
+        config_path.to_str().unwrap(),
+        temp_dir.path().to_str().unwrap(),
+    ]);
+    assert!(status.success(), "stderr: {}", stderr);
+    assert!(stdout.contains("f1.txt"));
+    assert!(cache_dir.join("cache.json").exists());
+}
+
+#[test]
+fn test_init_config_includes_all_fields() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("full_config.toml");
+
+    let (_, stderr, status) = run_fundoubler(&[
+        "--init-config",
+        config_path.to_str().unwrap(),
+    ]);
+    assert!(status.success(), "stderr: {}", stderr);
+
+    let content = fs::read_to_string(&config_path).unwrap();
+    assert!(content.contains("hash_cache"));
+    assert!(content.contains("hash_cache_dir"));
+    assert!(content.contains("hash_buffer_size"));
+}
+
+#[test]
+fn test_init_config_generated_file_is_loadable() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("generated.toml");
+
+    let (_, stderr, status) = run_fundoubler(&[
+        "--init-config",
+        config_path.to_str().unwrap(),
+    ]);
+    assert!(status.success(), "stderr: {}", stderr);
+
+    create_test_file(&temp_dir, "f1.txt", "x");
+    create_test_file(&temp_dir, "f2.txt", "x");
+
+    let (stdout, stderr2, status2) = run_fundoubler(&[
+        "--config",
+        config_path.to_str().unwrap(),
+        temp_dir.path().to_str().unwrap(),
+    ]);
+    assert!(status2.success(), "load and run failed: {}", stderr2);
+    assert!(stdout.contains("f1.txt") || stdout.contains("No duplicates"));
+}
+
+#[test]
 fn test_invalid_path() {
     // Test verifies that program doesn't panic on nonexistent path
     // walkdir handles this gracefully by returning empty iterator

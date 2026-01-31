@@ -52,6 +52,10 @@ fn default_hash_buffer_size() -> u64 {
     DEFAULT_HASH_BUFFER_SIZE
 }
 
+fn default_hash_cache_dir() -> PathBuf {
+    PathBuf::from(".fundoubler/.hashcache")
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, ValueEnum, PartialEq)]
 pub enum SortOrder {
     Name,
@@ -134,6 +138,14 @@ pub struct CliOptions {
     #[arg(long)]
     pub hash_buffer_size: Option<u64>,
     
+    /// Enable hash caching to avoid re-hashing on re-scan
+    #[arg(long)]
+    pub hash_cache: bool,
+    
+    /// Directory for hash cache files
+    #[arg(long)]
+    pub hash_cache_dir: Option<PathBuf>,
+    
     /// Sort order (can be specified multiple times)
     #[arg(long, value_enum)]
     pub sort: Vec<SortOrder>,
@@ -189,6 +201,10 @@ pub struct ConfigFile {
     #[serde(default = "default_hash_buffer_size")]
     pub hash_buffer_size: u64,
     
+    pub hash_cache: bool,
+    #[serde(default = "default_hash_cache_dir", serialize_with = "path_buf_to_str", deserialize_with = "path_buf_from_str")]
+    pub hash_cache_dir: PathBuf,
+    
     // Output control
     pub sort_orders: Vec<SortOrder>,
     pub limit: Option<usize>,
@@ -220,6 +236,8 @@ impl Default for ConfigFile {
             max_size: u64::MAX,
             name_filter: None,
             hash_buffer_size: DEFAULT_HASH_BUFFER_SIZE,
+            hash_cache: false,
+            hash_cache_dir: default_hash_cache_dir(),
             sort_orders: vec![SortOrder::SizeDesc, SortOrder::Name],
             limit: None,
             verbose: 0,
@@ -306,6 +324,12 @@ impl ConfigFile {
         }
         if let Some(buf) = cli.hash_buffer_size {
             config.hash_buffer_size = buf;
+        }
+        if cli.hash_cache {
+            config.hash_cache = true;
+        }
+        if let Some(dir) = &cli.hash_cache_dir {
+            config.hash_cache_dir = dir.clone();
         }
         if !cli.sort.is_empty() {
             config.sort_orders = cli.sort.clone();

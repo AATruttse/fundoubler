@@ -9,10 +9,12 @@ use walkdir::WalkDir;
 use crate::check::{CheckOptions, calculate_hash};
 use crate::config::ConfigFile;
 use crate::error::Result;
+use crate::hash_cache::HashCache;
 
 pub struct FileScanner {
     config: Arc<ConfigFile>,
     progress_bar: Option<ProgressBar>,
+    cache: Option<Arc<HashCache>>,
 }
 
 impl FileScanner {
@@ -29,9 +31,16 @@ impl FileScanner {
             None
         };
         
+        let cache = if config.hash_cache {
+            Some(Arc::new(HashCache::load(&config.hash_cache_dir)))
+        } else {
+            None
+        };
+        
         Self {
             config: Arc::new(config.clone()),
             progress_bar,
+            cache,
         }
     }
     
@@ -70,6 +79,10 @@ impl FileScanner {
         
         if let Some(pb) = &self.progress_bar {
             pb.finish_with_message("Scanning complete");
+        }
+        
+        if let Some(cache) = &self.cache {
+            let _ = cache.save();
         }
         
         // Group duplicates
@@ -142,19 +155,48 @@ impl FileScanner {
             key.modified = metadata.modified().ok();
         }
         
-        // Calculate hashes if needed
+        // Calculate hashes if needed (use cache when enabled)
         let buf_size = self.config.hash_buffer_size.try_into().unwrap_or(usize::MAX).max(256);
-        if self.config.compare_by_md5 {
-            key.md5 = Some(calculate_hash(&path, "md5", buf_size)?);
-        }
-        if self.config.compare_by_sha512 {
-            key.sha512 = Some(calculate_hash(&path, "sha512", buf_size)?);
-        }
-        if self.config.compare_by_xxh3 {
-            key.xxh3 = Some(calculate_hash(&path, "xxh3", buf_size)?);
-        }
+        let mtime = metadata.modified().ok();
+        let size = metadata.len();
+        
+        key.md5 = if self.config.compare_by_md5 {
+            Some(self.get_or_compute_hash(&path, size, mtime, "md5", buf_size)?)
+        } else {
+            None
+        };
+        key.sha512 = if self.config.compare_by_sha512 {
+            Some(self.get_or_compute_hash(&path, size, mtime, "sha512", buf_size)?)
+        } else {
+            None
+        };
+        key.xxh3 = if self.config.compare_by_xxh3 {
+            Some(self.get_or_compute_hash(&path, size, mtime, "xxh3", buf_size)?)
+        } else {
+            None
+        };
         
         Ok(Some((key, path)))
+    }
+    
+    fn get_or_compute_hash(
+        &self,
+        path: &PathBuf,
+        size: u64,
+        mtime: Option<std::time::SystemTime>,
+        algorithm: &str,
+        buf_size: usize,
+    ) -> Result<String> {
+        if let Some(cache) = &self.cache {
+            if let Some(cached) = cache.get(path, size, mtime, algorithm) {
+                return Ok(cached);
+            }
+        }
+        let hash = calculate_hash(path, algorithm, buf_size)?;
+        if let Some(cache) = &self.cache {
+            cache.insert(path, size, mtime, algorithm, hash.clone());
+        }
+        Ok(hash)
     }
 }
 

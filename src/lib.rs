@@ -3,6 +3,7 @@ use clap::Parser;
 pub mod check;
 pub mod config;
 pub mod error;
+pub mod hash_cache;
 pub mod scanner;
 
 pub use check::{CheckOptions, calculate_hash, compare};
