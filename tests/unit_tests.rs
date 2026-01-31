@@ -747,7 +747,7 @@ fn test_name_only_comparison() {
 
 #[test]
 fn test_created_timestamp_comparison() {
-    use std::time::{SystemTime, Duration};
+    use std::time::Duration;
     use std::thread;
     
     let temp_dir = tempfile::tempdir().unwrap();
@@ -772,13 +772,6 @@ fn test_created_timestamp_comparison() {
     
     // Files with different creation times should not be in the same group
     // (even if content is the same)
-    let all_grouped: Vec<String> = groups
-        .iter()
-        .flat_map(|g| &g.paths)
-        .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
-        .collect();
-    
-    // If both files are in the same group, comparison by created is not working
     // If in different groups or no duplicates found - this is expected
     // (since creation times are different)
     // Main thing - program should not panic

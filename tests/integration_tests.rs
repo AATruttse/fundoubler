@@ -757,7 +757,7 @@ fn test_init_config_creates_default_file() {
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("my_config.toml");
 
-    let (stdout, stderr, status) = run_fundoubler(&[
+    let (_stdout, stderr, status) = run_fundoubler(&[
         "--init-config",
         config_path.to_str().unwrap(),
     ]);

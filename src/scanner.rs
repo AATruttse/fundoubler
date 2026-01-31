@@ -8,7 +8,7 @@ use walkdir::WalkDir;
 
 use crate::check::{CheckOptions, calculate_hash};
 use crate::config::ConfigFile;
-use crate::error::{AppError, Result};
+use crate::error::Result;
 
 pub struct FileScanner {
     config: Arc<ConfigFile>,
@@ -50,16 +50,22 @@ impl FileScanner {
             pb.set_message("Scanning files...");
         }
         
-        // Process files in parallel
-        let file_infos: Vec<_> = entries
+        // Process files in parallel (Ok(Some) = include, Ok(None) = filtered, Err = real error)
+        let results: Vec<_> = entries
             .par_iter()
-            .filter_map(|entry| {
+            .map(|entry| {
                 if let Some(pb) = &self.progress_bar {
                     pb.inc(1);
                 }
-                
-                self.process_file(entry).ok()
+                self.process_file(entry)
             })
+            .collect();
+        
+        let file_infos: Vec<_> = results
+            .into_iter()
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .filter_map(|x| x)
             .collect();
         
         if let Some(pb) = &self.progress_bar {
@@ -93,26 +99,27 @@ impl FileScanner {
         Ok(result)
     }
     
-    fn process_file(&self, entry: &walkdir::DirEntry) -> Result<(CheckOptions, PathBuf)> {
+    /// Returns Ok(Some(...)) to include, Ok(None) if filtered out, Err for real errors.
+    fn process_file(&self, entry: &walkdir::DirEntry) -> Result<Option<(CheckOptions, PathBuf)>> {
         let path = entry.path().to_path_buf();
 
         if self.config.verbose > 2 {
             println!("{:#?}", path);
         }
 
-        let metadata = entry.metadata()?;  // Fixed: removed map_err
+        let metadata = entry.metadata()?;
         
-        // Apply filters
+        // Apply filters (return None = excluded by design, not an error)
         if metadata.len() < self.config.min_size 
             || metadata.len() > self.config.max_size 
         {
-            return Err(AppError::Config("File filtered out".to_string()));
+            return Ok(None);
         }
         
         if let Some(filter) = &self.config.name_filter {
             let re = regex::Regex::new(filter)?;
             if !re.is_match(&path.to_string_lossy()) {
-                return Err(AppError::Config("File filtered out".to_string()));
+                return Ok(None);
             }
         }
         
@@ -148,7 +155,7 @@ impl FileScanner {
             key.xxh3 = Some(calculate_hash(&path, "xxh3", 8192)?);
         }
         
-        Ok((key, path))
+        Ok(Some((key, path)))
     }
 }
 
