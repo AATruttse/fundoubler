@@ -60,6 +60,7 @@ Default behavior compares by **size** and **XXH3** hash. You can add or override
 - **Size range (bytes)**: `fundoubler --min-size 1024 --max-size 1048576`
 - **Name pattern (regex)**: `fundoubler --filter ".*\.(jpg|png)$"`
 - **Limit groups shown**: `fundoubler --limit 10`
+- **Hash buffer size** (bytes, default 64KB): `fundoubler --hash-buffer-size 131072`
 
 ### Deletion options
 
@@ -132,6 +133,7 @@ compare_by_size = true
 compare_by_name = false
 min_size = 0
 max_size = 1073741824
+hash_buffer_size = 65536
 sort_orders = ["SizeDesc", "Name"]
 dry_run = true
 ```

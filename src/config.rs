@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
+
+/// Default hash read buffer size in bytes (64KB).
+pub const DEFAULT_HASH_BUFFER_SIZE: u64 = 65536;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fs;
 
@@ -43,6 +46,10 @@ where
 
 fn default_path_start() -> PathBuf {
     PathBuf::from(".")
+}
+
+fn default_hash_buffer_size() -> u64 {
+    DEFAULT_HASH_BUFFER_SIZE
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, ValueEnum, PartialEq)]
@@ -123,6 +130,10 @@ pub struct CliOptions {
     #[arg(long)]
     pub filter: Option<String>,
     
+    /// Hash read buffer size in bytes (default: 64KB)
+    #[arg(long)]
+    pub hash_buffer_size: Option<u64>,
+    
     /// Sort order (can be specified multiple times)
     #[arg(long, value_enum)]
     pub sort: Vec<SortOrder>,
@@ -175,6 +186,9 @@ pub struct ConfigFile {
     pub max_size: u64,
     pub name_filter: Option<String>,
     
+    #[serde(default = "default_hash_buffer_size")]
+    pub hash_buffer_size: u64,
+    
     // Output control
     pub sort_orders: Vec<SortOrder>,
     pub limit: Option<usize>,
@@ -205,6 +219,7 @@ impl Default for ConfigFile {
             min_size: 0,
             max_size: u64::MAX,
             name_filter: None,
+            hash_buffer_size: DEFAULT_HASH_BUFFER_SIZE,
             sort_orders: vec![SortOrder::SizeDesc, SortOrder::Name],
             limit: None,
             verbose: 0,
@@ -288,6 +303,9 @@ impl ConfigFile {
         }
         if let Some(filter) = &cli.filter {
             config.name_filter = Some(filter.clone());
+        }
+        if let Some(buf) = cli.hash_buffer_size {
+            config.hash_buffer_size = buf;
         }
         if !cli.sort.is_empty() {
             config.sort_orders = cli.sort.clone();

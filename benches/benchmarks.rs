@@ -1,5 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
 use fundoubler::check::calculate_hash;
+use fundoubler::DEFAULT_HASH_BUFFER_SIZE;
 use std::time::Duration;
 use tempfile::NamedTempFile;
 
@@ -25,19 +26,19 @@ fn bench_hash_algorithms(c: &mut Criterion) {
         group.bench_with_input(
             BenchmarkId::new("md5", format!("{}MB", size)),
             size,
-            |b, _| b.iter(|| calculate_hash(&path, "md5", 8192).unwrap())
+            |b, _| b.iter(|| calculate_hash(&path, "md5", DEFAULT_HASH_BUFFER_SIZE as usize).unwrap())
         );
         
         group.bench_with_input(
             BenchmarkId::new("sha512", format!("{}MB", size)),
             size,
-            |b, _| b.iter(|| calculate_hash(&path, "sha512", 8192).unwrap())
+            |b, _| b.iter(|| calculate_hash(&path, "sha512", DEFAULT_HASH_BUFFER_SIZE as usize).unwrap())
         );
         
         group.bench_with_input(
             BenchmarkId::new("xxh3", format!("{}MB", size)),
             size,
-            |b, _| b.iter(|| calculate_hash(&path, "xxh3", 8192).unwrap())
+            |b, _| b.iter(|| calculate_hash(&path, "xxh3", DEFAULT_HASH_BUFFER_SIZE as usize).unwrap())
         );
     }
     

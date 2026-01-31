@@ -1,4 +1,5 @@
 use fundoubler::check::{CheckOptions, calculate_hash, compare};
+use fundoubler::DEFAULT_HASH_BUFFER_SIZE;
 use fundoubler::config::{ConfigFile, SortOrder};
 use fundoubler::scanner::FileScanner;
 use tempfile::NamedTempFile;
@@ -106,14 +107,14 @@ fn test_calculate_hash_consistent_for_same_content() {
     std::fs::write(temp_file1.path(), content).unwrap();
     std::fs::write(temp_file2.path(), content).unwrap();
     
-    let hash1_md5 = calculate_hash(&temp_file1.path().to_path_buf(), "md5", 1024).unwrap();
-    let hash2_md5 = calculate_hash(&temp_file2.path().to_path_buf(), "md5", 1024).unwrap();
+    let hash1_md5 = calculate_hash(&temp_file1.path().to_path_buf(), "md5", DEFAULT_HASH_BUFFER_SIZE as usize).unwrap();
+    let hash2_md5 = calculate_hash(&temp_file2.path().to_path_buf(), "md5", DEFAULT_HASH_BUFFER_SIZE as usize).unwrap();
     
-    let hash1_sha512 = calculate_hash(&temp_file1.path().to_path_buf(), "sha512", 1024).unwrap();
-    let hash2_sha512 = calculate_hash(&temp_file2.path().to_path_buf(), "sha512", 1024).unwrap();
+    let hash1_sha512 = calculate_hash(&temp_file1.path().to_path_buf(), "sha512", DEFAULT_HASH_BUFFER_SIZE as usize).unwrap();
+    let hash2_sha512 = calculate_hash(&temp_file2.path().to_path_buf(), "sha512", DEFAULT_HASH_BUFFER_SIZE as usize).unwrap();
     
-    let hash1_xxh3 = calculate_hash(&temp_file1.path().to_path_buf(), "xxh3", 1024).unwrap();
-    let hash2_xxh3 = calculate_hash(&temp_file2.path().to_path_buf(), "xxh3", 1024).unwrap();
+    let hash1_xxh3 = calculate_hash(&temp_file1.path().to_path_buf(), "xxh3", DEFAULT_HASH_BUFFER_SIZE as usize).unwrap();
+    let hash2_xxh3 = calculate_hash(&temp_file2.path().to_path_buf(), "xxh3", DEFAULT_HASH_BUFFER_SIZE as usize).unwrap();
     
     // Same content -> same hashes
     assert_eq!(hash1_md5, hash2_md5);
@@ -134,14 +135,14 @@ fn test_calculate_hash_different_for_different_content() {
     std::fs::write(temp_file1.path(), "content one").unwrap();
     std::fs::write(temp_file2.path(), "content two").unwrap();
     
-    let hash1_md5 = calculate_hash(&temp_file1.path().to_path_buf(), "md5", 1024).unwrap();
-    let hash2_md5 = calculate_hash(&temp_file2.path().to_path_buf(), "md5", 1024).unwrap();
+    let hash1_md5 = calculate_hash(&temp_file1.path().to_path_buf(), "md5", DEFAULT_HASH_BUFFER_SIZE as usize).unwrap();
+    let hash2_md5 = calculate_hash(&temp_file2.path().to_path_buf(), "md5", DEFAULT_HASH_BUFFER_SIZE as usize).unwrap();
     
-    let hash1_sha512 = calculate_hash(&temp_file1.path().to_path_buf(), "sha512", 1024).unwrap();
-    let hash2_sha512 = calculate_hash(&temp_file2.path().to_path_buf(), "sha512", 1024).unwrap();
+    let hash1_sha512 = calculate_hash(&temp_file1.path().to_path_buf(), "sha512", DEFAULT_HASH_BUFFER_SIZE as usize).unwrap();
+    let hash2_sha512 = calculate_hash(&temp_file2.path().to_path_buf(), "sha512", DEFAULT_HASH_BUFFER_SIZE as usize).unwrap();
     
-    let hash1_xxh3 = calculate_hash(&temp_file1.path().to_path_buf(), "xxh3", 1024).unwrap();
-    let hash2_xxh3 = calculate_hash(&temp_file2.path().to_path_buf(), "xxh3", 1024).unwrap();
+    let hash1_xxh3 = calculate_hash(&temp_file1.path().to_path_buf(), "xxh3", DEFAULT_HASH_BUFFER_SIZE as usize).unwrap();
+    let hash2_xxh3 = calculate_hash(&temp_file2.path().to_path_buf(), "xxh3", DEFAULT_HASH_BUFFER_SIZE as usize).unwrap();
     
     // Different content -> different hashes
     assert_ne!(hash1_md5, hash2_md5);
@@ -239,8 +240,8 @@ fn test_config_combination_logic() {
 fn test_memory_efficiency_large_file() {
     // Create a file larger than buffer size
     let temp_file = NamedTempFile::new().unwrap();
-    let buffer_size = 8192;
-    let file_size = buffer_size * 3; // 24KB
+    let buffer_size = DEFAULT_HASH_BUFFER_SIZE as usize;
+    let file_size = buffer_size * 3;
     
     let content = vec![65u8; file_size]; // 'A' repeated
     std::fs::write(temp_file.path(), &content).unwrap();
@@ -692,7 +693,7 @@ fn test_hash_calculation_error_handling() {
     
     // Attempt to calculate hash of nonexistent file
     let nonexistent = PathBuf::from("/nonexistent/file/that/does/not/exist.txt");
-    let result = calculate_hash(&nonexistent, "md5", 8192);
+    let result = calculate_hash(&nonexistent, "md5", DEFAULT_HASH_BUFFER_SIZE as usize);
     
     assert!(
         result.is_err(),

@@ -143,16 +143,15 @@ impl FileScanner {
         }
         
         // Calculate hashes if needed
+        let buf_size = self.config.hash_buffer_size.try_into().unwrap_or(usize::MAX).max(256);
         if self.config.compare_by_md5 {
-            key.md5 = Some(calculate_hash(&path, "md5", 8192)?);
+            key.md5 = Some(calculate_hash(&path, "md5", buf_size)?);
         }
-        
         if self.config.compare_by_sha512 {
-            key.sha512 = Some(calculate_hash(&path, "sha512", 8192)?);
+            key.sha512 = Some(calculate_hash(&path, "sha512", buf_size)?);
         }
-        
         if self.config.compare_by_xxh3 {
-            key.xxh3 = Some(calculate_hash(&path, "xxh3", 8192)?);
+            key.xxh3 = Some(calculate_hash(&path, "xxh3", buf_size)?);
         }
         
         Ok(Some((key, path)))

@@ -6,7 +6,7 @@ pub mod error;
 pub mod scanner;
 
 pub use check::{CheckOptions, calculate_hash, compare};
-pub use config::{ConfigFile, CliOptions, SortOrder};
+pub use config::{ConfigFile, CliOptions, SortOrder, DEFAULT_HASH_BUFFER_SIZE};
 pub use error::{AppError, Result};
 pub use scanner::{FileScanner, FileGroup};
 
