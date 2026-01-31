@@ -66,6 +66,33 @@ Default behavior compares by **size** and **XXH3** hash. You can add or override
 - **Interactive deletion**: `fundoubler --delete`
 - **Force delete without confirmation (DANGEROUS)**: `fundoubler --delete --force-delete`
 - **Dry run (no deletions)**: `fundoubler --delete --dry-run`
+- **Skip confirmation prompts** (scripts, CI): `fundoubler --skip-confirm` — assumes "yes" to all prompts
+
+### Deletion flag interaction
+
+How `--delete`, `--force-delete`, `--dry-run`, and `--skip-confirm` work together:
+
+| `--delete` | `--force-delete` | `--dry-run` | `--skip-confirm` | Result |
+|:----------:|:----------------:|:-----------:|:----------------:|--------|
+| ❌ | - | - | - | No deletion (scan only) |
+| ✅ | ❌ | ✅ | - | Dry run: show what would be deleted, no actual deletions |
+| ✅ | ❌ | ❌ | ❌ | Interactive: prompt for each file to delete |
+| ✅ | ❌ | ❌ | ✅ | Delete all duplicates (assume yes to each prompt) |
+| ✅ | ✅ | ✅ | - | Dry run (no deletions; `--dry-run` wins) |
+| ✅ | ✅ | ❌ | ❌ | One global "Are you sure?" prompt, then delete all |
+| ✅ | ✅ | ❌ | ✅ | Delete all duplicates with no prompts |
+
+**Flow:**
+
+1. **`--dry-run`** — Always blocks deletion. Use it to preview changes safely.
+2. **`--force-delete`** — Skips per-file prompts; delete all duplicates at once. Shows one global confirmation unless `--skip-confirm` is set.
+3. **`--skip-confirm`** — Assumes "yes" to all prompts (both global and per-file). Use in scripts or CI.
+
+**Examples for scripts:**
+```bash
+fundoubler --delete --dry-run /path              # Preview only
+fundoubler --delete --force-delete --skip-confirm /path   # Unattended deletion
+```
 
 ### Output control
 

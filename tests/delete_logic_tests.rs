@@ -15,7 +15,6 @@ fn test_delete_correct_files_basic() {
     fs::write(temp_dir.path().join("different.txt"), "different content").unwrap();
     
     let output = Command::new(env!("CARGO_BIN_EXE_fundoubler"))
-        .env("TEST_MODE", "1")
         .args(&[
             temp_dir.path().to_str().unwrap(),
             "--md5",
@@ -93,7 +92,6 @@ fn test_delete_keeps_first_file_in_sorted_group() {
     
     // When sorting by name: a_first.txt should be first (kept)
     let output = Command::new(env!("CARGO_BIN_EXE_fundoubler"))
-        .env("TEST_MODE", "1")
         .args(&[
             temp_dir.path().to_str().unwrap(),
             "--md5",

@@ -146,6 +146,10 @@ pub struct CliOptions {
     /// Show only N groups of duplicates
     #[arg(long)]
     pub limit: Option<usize>,
+    
+    /// Skip confirmation prompts; assume "yes" to all (for scripts, CI)
+    #[arg(long)]
+    pub skip_confirm: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -183,7 +187,7 @@ pub struct ConfigFile {
     pub dry_run: bool,
 
     #[serde(skip_serializing, default)]
-    pub test_mode: bool
+    pub skip_confirm: bool
 }
 
 impl Default for ConfigFile {
@@ -208,7 +212,7 @@ impl Default for ConfigFile {
             delete: false,
             force_delete: false,
             dry_run: false,
-            test_mode: false,
+            skip_confirm: false,
         }
     }
 }
@@ -292,8 +296,7 @@ impl ConfigFile {
             config.limit = Some(limit);
         }
 
-        config.test_mode = std::env::var("CARGO_TARGET_DIR").is_ok()
-            || std::env::var("TEST_MODE").is_ok();
+        config.skip_confirm = cli.skip_confirm;
 
         Ok(config)
     }

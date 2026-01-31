@@ -27,9 +27,7 @@ fn test_duplicate_detection_simple() {
     fs::write(temp_dir.path().join("file1.txt"), content).unwrap();
     fs::write(temp_dir.path().join("file2.txt"), content).unwrap();
     
-    // Run with test mode
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_fundoubler"))
-        .env("TEST_MODE", "1")
         .arg(temp_dir.path())
         .arg("--md5")
         .output()

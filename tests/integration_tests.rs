@@ -3,11 +3,10 @@ use assert_fs::TempDir;
 use std::fs;
 use std::process::Command;
 
-/// Helper function to run fundoubler with arguments
+/// Helper function to run fundoubler with arguments.
+/// Use --dry-run to block deletion; use --skip-confirm only when testing actual deletion.
 fn run_fundoubler(args: &[&str]) -> (String, String, std::process::ExitStatus) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_fundoubler"));
-    // Enable test mode to disable interactive dialoguer confirmations
-    cmd.env("TEST_MODE", "1");
     cmd.args(args);
     
     let output = cmd.output().expect("Failed to execute process");
@@ -157,13 +156,13 @@ fn test_actual_deletion_with_force() {
     assert!(file_to_keep.exists());
     assert!(file_to_delete.exists());
     
-    // Run with simulated responses for dialoguer
-    // Use --force-delete to avoid interactivity
+    // Use --force-delete and --skip-confirm to avoid interactivity
     let (_stdout, stderr, status) = run_fundoubler(&[
         temp_dir.path().to_str().unwrap(),
         "--md5",
         "--delete",
         "--force-delete",
+        "--skip-confirm",
         "--sort=name", // "delete.txt" comes before "keep.txt", so "keep.txt" should be deleted
     ]);
     

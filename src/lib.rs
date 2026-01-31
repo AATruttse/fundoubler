@@ -137,8 +137,7 @@ fn handle_deletion(groups: &[FileGroup], config: &ConfigFile) -> Result<()> {
     if config.force_delete {
         println!("\nWARNING: Force delete enabled. Files will be deleted without confirmation!");
         
-        // Skip confirmation in test mode
-        if !config.test_mode {
+        if !config.skip_confirm {
             if !Confirm::new()
                 .with_prompt("Are you absolutely sure?")
                 .default(false)
@@ -163,18 +162,14 @@ fn handle_deletion(groups: &[FileGroup], config: &ConfigFile) -> Result<()> {
                     group.paths[0].display()
                 );
                 
-                // Automatically answer "no" in test mode
-                if !config.test_mode {
-                    if !Confirm::new()
-                        .with_prompt(&prompt)
-                        .default(false)
-                        .interact()
-                        .map_err(|e| AppError::Dialoguer(e))?
-                    {
-                        continue;
-                    }
-                } else {
-                    // Skip deletion in test mode
+                if config.skip_confirm {
+                    // Assume yes - proceed to delete
+                } else if !Confirm::new()
+                    .with_prompt(&prompt)
+                    .default(false)
+                    .interact()
+                    .map_err(|e| AppError::Dialoguer(e))?
+                {
                     continue;
                 }
             }

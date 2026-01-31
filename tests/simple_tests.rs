@@ -4,9 +4,6 @@ use std::process::Command;
 
 fn run_fundoubler(args: &[&str]) -> (String, String, std::process::ExitStatus) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_fundoubler"));
-    
-    // Set environment variable for test mode
-    cmd.env("TEST_MODE", "1");
     cmd.args(args);
     
     let output = cmd.output().expect("Failed to execute process");
