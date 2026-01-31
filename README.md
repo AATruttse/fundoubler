@@ -82,11 +82,16 @@ How `--delete`, `--force-delete`, `--dry-run`, and `--skip-confirm` work togethe
 | ✅ | ✅ | ❌ | ❌ | One global "Are you sure?" prompt, then delete all |
 | ✅ | ✅ | ❌ | ✅ | Delete all duplicates with no prompts |
 
+**Important:**
+
+- **`--force-delete`** has no effect without `--delete`. Deletion logic only runs when `--delete` is set.
+- **`--dry-run` and `--skip-confirm` together** never delete anything. `--dry-run` always blocks deletion, regardless of other flags.
+
 **Flow:**
 
 1. **`--dry-run`** — Always blocks deletion. Use it to preview changes safely.
-2. **`--force-delete`** — Skips per-file prompts; delete all duplicates at once. Shows one global confirmation unless `--skip-confirm` is set.
-3. **`--skip-confirm`** — Assumes "yes" to all prompts (both global and per-file). Use in scripts or CI.
+2. **`--force-delete`** (requires `--delete`) — Skips per-file prompts; delete all duplicates at once. Shows one global confirmation unless `--skip-confirm` is set.
+3. **`--skip-confirm`** — Assumes "yes" to all prompts (both global and per-file). Use in scripts or CI. Does nothing if `--dry-run` is set.
 
 **Examples for scripts:**
 ```bash
