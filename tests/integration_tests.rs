@@ -924,6 +924,7 @@ fn test_init_config_includes_all_fields() {
     assert!(content.contains("source_dirs"));
     assert!(content.contains("log_level"));
     assert!(content.contains("logs_dir"));
+    assert!(content.contains("delete_log"));
 }
 
 #[test]
@@ -1248,5 +1249,101 @@ fn test_size_only_comparison_no_hashing() {
         "--size only should find size-duplicates without hashing"
     );
 }
+
+#[test]
+fn test_special_characters_in_filename() {
+    let temp_dir = TempDir::new().unwrap();
+
+    create_test_file(&temp_dir, "file with spaces.txt", "dup");
+    create_test_file(&temp_dir, "file_with_underscores.txt", "dup");
+
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--md5",
+    ]);
+
+    assert!(status.success(), "stderr: {}", stderr);
+    assert!(stdout.contains("dup") || stdout.contains("file with spaces") || stdout.contains("file_with_underscores"));
+}
+
+#[test]
+fn test_deletion_multiple_files_in_group() {
+    let temp_dir = TempDir::new().unwrap();
+
+    create_test_file(&temp_dir, "a.txt", "dup");
+    create_test_file(&temp_dir, "b.txt", "dup");
+    create_test_file(&temp_dir, "c.txt", "dup");
+
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--md5",
+        "--delete",
+        "--force-delete",
+        "--skip-confirm",
+        "--sort=name",
+    ]);
+
+    assert!(status.success(), "stderr: {}", stderr);
+    assert!(stdout.contains("Deleted"));
+}
+
+#[test]
+fn test_sort_created_integration() {
+    let temp_dir = TempDir::new().unwrap();
+
+    create_test_file(&temp_dir, "a.txt", "xxx");
+    create_test_file(&temp_dir, "b.txt", "xxx");
+
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--size",
+        "--md5",
+        "--sort=created",
+    ]);
+
+    assert!(status.success(), "stderr: {}", stderr);
+    assert!(stdout.contains("a.txt") && stdout.contains("b.txt"), "stdout: {}", stdout);
+}
+
+#[test]
+fn test_sort_modified_integration() {
+    let temp_dir = TempDir::new().unwrap();
+
+    create_test_file(&temp_dir, "a.txt", "xxx");
+    create_test_file(&temp_dir, "b.txt", "xxx");
+
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--size",
+        "--md5",
+        "--sort=modified",
+    ]);
+
+    assert!(status.success(), "stderr: {}", stderr);
+    assert!(stdout.contains("a.txt") && stdout.contains("b.txt"), "stdout: {}", stdout);
+}
+
+#[test]
+fn test_output_file_format() {
+    let temp_dir = TempDir::new().unwrap();
+    let output_path = temp_dir.path().join("report.txt");
+
+    create_test_file(&temp_dir, "a.txt", "dup");
+    create_test_file(&temp_dir, "b.txt", "dup");
+
+    let (_, stderr, status) = run_fundoubler(&[
+        "--md5",
+        temp_dir.path().to_str().unwrap(),
+        output_path.to_str().unwrap(),
+    ]);
+
+    assert!(status.success(), "stderr: {}", stderr);
+    let content = std::fs::read_to_string(&output_path).unwrap();
+    assert!(content.contains("Duplicate Report"));
+    assert!(content.contains("Criteria:"));
+    assert!(content.contains("a.txt") && content.contains("b.txt"));
+}
+
+// Delete log and restore tests moved to tests/del_log_tests.rs
 
 // Exclude and source directory tests moved to tests/exclude_source_tests.rs

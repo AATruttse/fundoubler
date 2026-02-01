@@ -211,6 +211,14 @@ pub struct CliOptions {
     /// Directory for log files (default: ./logs)
     #[arg(long)]
     pub logs_dir: Option<PathBuf>,
+
+    /// Disable delete log (default: delete log is on)
+    #[arg(long)]
+    pub no_delete_log: bool,
+
+    /// Restore deleted files from delete log (use latest log if no path given)
+    #[arg(long, value_name = "LOG_FILE", num_args = 0..=1, default_missing_value = "_latest_")]
+    pub restore: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -264,6 +272,8 @@ pub struct ConfigFile {
     pub log_level: u8,
     #[serde(default = "default_logs_dir", serialize_with = "path_buf_to_str", deserialize_with = "path_buf_from_str")]
     pub logs_dir: PathBuf,
+
+    pub delete_log: bool,
 }
 
 impl Default for ConfigFile {
@@ -296,6 +306,7 @@ impl Default for ConfigFile {
             skip_confirm: false,
             log_level: 0,
             logs_dir: default_logs_dir(),
+            delete_log: true,
         }
     }
 }
@@ -401,6 +412,10 @@ impl ConfigFile {
         }
         if let Some(dir) = &cli.logs_dir {
             config.logs_dir = dir.clone();
+        }
+
+        if cli.no_delete_log {
+            config.delete_log = false;
         }
 
         Ok(config)

@@ -2,6 +2,7 @@ use clap::Parser;
 
 pub mod check;
 pub mod config;
+pub mod del_log;
 pub mod error;
 pub mod hash_cache;
 pub mod log;
@@ -12,13 +13,28 @@ pub use config::{ConfigFile, CliOptions, SortOrder, DEFAULT_HASH_BUFFER_SIZE};
 pub use error::{AppError, Result};
 pub use scanner::{FileScanner, FileGroup};
 
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::Write;
 use dialoguer::Confirm;
+
+/// Sentinel path for "use latest delete log"
+const RESTORE_LATEST: &str = "_latest_";
 
 /// Main application function
 pub fn run() -> Result<()> {
     let cli = CliOptions::parse();
+
+    // --restore: restore deleted files from delete log (skip normal flow)
+    if let Some(restore_arg) = &cli.restore {
+        let logs_dir = cli.logs_dir.clone().unwrap_or_else(|| std::path::PathBuf::from("./logs"));
+        let log_path = if restore_arg.to_string_lossy() == RESTORE_LATEST {
+            del_log::find_latest_del_log(&logs_dir)?
+                .ok_or_else(|| AppError::Config("No delete log found. Run a deletion first.".to_string()))?
+        } else {
+            restore_arg.clone()
+        };
+        return run_restore(&log_path, cli.skip_confirm);
+    }
 
     // Initialize logging early (from CLI) so config/validation errors are logged
     if cli.log_level > 0 {
@@ -201,18 +217,34 @@ fn handle_deletion(groups: &[FileGroup], config: &ConfigFile) -> Result<()> {
         log::log_info("Force delete confirmed");
     }
 
+    let mut del_log_file: Option<(std::path::PathBuf, File)> = None;
+    if config.delete_log {
+        match del_log::create_del_log(&config.logs_dir) {
+            Ok((path, file)) => {
+                del_log_file = Some((path, file));
+                if !config.silent {
+                    println!("Delete log: {}", del_log_file.as_ref().unwrap().0.display());
+                }
+            }
+            Err(e) => {
+                log::log_error(&format!("Failed to create delete log: {}", e));
+                eprintln!("Warning: could not create delete log: {}", e);
+            }
+        }
+    }
+
     let mut deleted_count = 0;
-    
+
     for group in groups {
-        // Keep the first file, delete the rest
+        let kept = &group.paths[0];
         for (_i, path) in group.paths.iter().enumerate().skip(1) {
             if !config.force_delete {
                 let prompt = format!(
                     "Delete {}? (Keep: {})",
                     path.display(),
-                    group.paths[0].display()
+                    kept.display()
                 );
-                
+
                 if config.skip_confirm {
                     // Assume yes - proceed to delete
                 } else if !Confirm::new()
@@ -224,14 +256,17 @@ fn handle_deletion(groups: &[FileGroup], config: &ConfigFile) -> Result<()> {
                     continue;
                 }
             }
-            
+
             if config.verbose > 0 {
                 println!("Deleting: {}", path.display());
             }
-            
+
             match std::fs::remove_file(path) {
                 Ok(_) => {
                     deleted_count += 1;
+                    if let Some((_, ref mut f)) = &mut del_log_file {
+                        let _ = del_log::write_record(f, path, kept);
+                    }
                     if config.verbose > 0 {
                         println!("  Deleted successfully.");
                     }
@@ -244,9 +279,68 @@ fn handle_deletion(groups: &[FileGroup], config: &ConfigFile) -> Result<()> {
             }
         }
     }
-    
+
     log::log_info(&format!("Deleted {} duplicate files", deleted_count));
     println!("\nDeleted {} duplicate files.", deleted_count);
+    Ok(())
+}
+
+fn run_restore(log_path: &std::path::Path, skip_confirm: bool) -> Result<()> {
+    let records = del_log::parse_del_log(log_path)
+        .map_err(|e| AppError::Io(e))?;
+
+    if records.is_empty() {
+        println!("Delete log is empty. Nothing to restore.");
+        return Ok(());
+    }
+
+    println!("Restoring from {} ({} records)", log_path.display(), records.len());
+    let mut restored = 0;
+    let mut errors = 0;
+
+    for (deleted, source) in &records {
+        if !source.exists() {
+            eprintln!("Source no longer exists, cannot restore {}: {}", deleted.display(), source.display());
+            errors += 1;
+            continue;
+        }
+        if deleted.exists() {
+            eprintln!("Skipping {}: file already exists", deleted.display());
+            continue;
+        }
+        if !skip_confirm {
+            let prompt = format!(
+                "Restore {} from {}?",
+                deleted.display(),
+                source.display()
+            );
+            if !Confirm::new()
+                .with_prompt(&prompt)
+                .default(false)
+                .interact()
+                .map_err(|e| AppError::Dialoguer(e))?
+            {
+                continue;
+            }
+        }
+        if let Some(parent) = deleted.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent).map_err(AppError::Io)?;
+            }
+        }
+        match fs::copy(source, deleted) {
+            Ok(_) => {
+                restored += 1;
+                println!("  Restored: {}", deleted.display());
+            }
+            Err(e) => {
+                eprintln!("  Error restoring {}: {}", deleted.display(), e);
+                errors += 1;
+            }
+        }
+    }
+
+    println!("\nRestored {} files. {} errors.", restored, errors);
     Ok(())
 }
 

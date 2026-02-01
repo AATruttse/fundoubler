@@ -5,15 +5,16 @@ A fast, cross-platform utility for finding and removing file duplicates written 
 ## Features
 
 - **Fast scanning**: Uses parallel processing for large directories
-- **Multiple comparison methods**: Size, name, dates, and various hash algorithms (MD5, SHA512, XXH3)
-- **Smart filtering**: Filter by size, name patterns (regex), and exclude directories
+- **Multiple comparison methods**: Size, name, creation/modification dates, and hash algorithms (MD5, SHA512, XXH3)
+- **Smart filtering**: Filter by size, name patterns (regex), exclude directories
 - **Source directories**: Prefer files in specified dirs when choosing which duplicate to keep
-- **Safe deletion**: Interactive confirmation or dry-run mode
+- **Safe deletion**: Interactive per-file confirmation, dry-run mode, or unattended with `--skip-confirm`
+- **Delete log and restore**: Records deletions for undo; restore files from logs with `--restore`
 - **Hash cache**: Avoid re-hashing on re-scans (optional)
 - **Logging**: Configurable log levels to file
 - **Progress reporting**: Visual progress bars for long operations
 - **Export results**: Save duplicate reports to files
-- **Configuration file**: TOML config with `--config`; CLI overrides file options
+- **Configuration file**: TOML config with `--config`; CLI options override file settings
 - **Cross-platform**: Works on Windows, macOS, and Linux
 
 ## Installation
@@ -33,7 +34,12 @@ fundoubler [OPTIONS] [PATH_START] [OUTPUT]
 ```
 
 - **PATH_START**: Directory to scan (default: current directory `.`)
-- **OUTPUT**: Optional file to write results to (default: stdout)
+- **OUTPUT**: Optional file to write results to (positional, after path)
+
+**Modes** (mutually exclusive):
+- **Normal scan**: Find duplicates in `PATH_START`, optionally delete, write report
+- **Restore**: `fundoubler --restore` — restore files from delete log (skips scan)
+- **Init config**: `fundoubler --init-config` — create default config file and exit
 
 Run `fundoubler --help` for the full list of options.
 
@@ -41,8 +47,8 @@ Run `fundoubler --help` for the full list of options.
 
 - **Find duplicates in current directory**: `fundoubler`
 - **Find duplicates in a directory**: `fundoubler /path/to/directory`
-- **Find duplicates by content (enables MD5, SHA512, XXH3)**: `fundoubler --content /path/to/directory`
-- **Save results to file**: `fundoubler /path/to/directory duplicates.txt`
+- **Find duplicates by content** (MD5, SHA512, XXH3): `fundoubler --content` or `fundoubler -t`
+- **Save results to file**: `fundoubler /path/to/directory report.txt`
 
 ### Comparison options (CLI)
 
@@ -56,7 +62,7 @@ Default behavior compares by **size** and **XXH3** hash. Via CLI or config file:
 - **By size**: `fundoubler --size`
 - **By creation date**: `fundoubler --create-date`
 - **By last modified date**: `fundoubler --mod-date`
-- **By content (all hashes)**: `fundoubler --content`
+- **By content (all hashes)**: `fundoubler --content` or `-t`
 - **By MD5**: `fundoubler --md5`
 - **By SHA512**: `fundoubler --sha512`
 - **By XXH3 (fast)**: `fundoubler --xxh3`
@@ -81,6 +87,8 @@ Default behavior compares by **size** and **XXH3** hash. Via CLI or config file:
 - **Force delete without confirmation (DANGEROUS)**: `fundoubler --delete --force-delete` or `-f`
 - **Dry run (no deletions)**: `fundoubler --delete --dry-run`
 - **Skip confirmation prompts** (scripts, CI): `fundoubler --skip-confirm` — assumes "yes" to all prompts
+- **Delete log** (default: on): Records each deleted file and its kept duplicate for restore. Use `--no-delete-log` to disable.
+- **Restore**: `fundoubler --restore` uses the latest delete log; `fundoubler --restore /path/to/log` uses a specific file. Prompts for each file unless `--skip-confirm`. Use `--logs-dir` if logs are not in `./logs`.
 
 
 ### Deletion flag interaction
@@ -114,6 +122,13 @@ fundoubler --delete --dry-run /path              # Preview only
 fundoubler --delete --force-delete --skip-confirm /path   # Unattended deletion
 ```
 
+**Delete log and restore:**
+- Delete logs: `logs_dir/del_logs/YYYYMMDDHHMMSSfundel.log` (default `./logs/del_logs/`)
+- Each record: deleted path + kept duplicate path
+- `fundoubler --restore` — use latest log (in `./logs/del_logs/` or `--logs-dir`)
+- `fundoubler --restore /path/to/20260124120000fundel.log` — use specific log
+- Prompts for each file unless `--skip-confirm`
+
 ### Logging
 
 - **Logging level** (repeatable, like verbose): `fundoubler -l` (errors), `-ll` (+info), `-lll` (+debug)
@@ -123,10 +138,10 @@ fundoubler --delete --force-delete --skip-confirm /path   # Unattended deletion
 
 ### Output control
 
-- **Sort order** (can repeat): `fundoubler --sort size-desc --sort name`
-  - Values: `name`, `name-desc`, `size`, `size-desc`, `created`, `created-desc`, `modified`, `modified-desc`
-- **Verbose**: `fundoubler -v` or `fundoubler -vv`
-- **Silent**: `fundoubler -s` or `fundoubler --silent`
+- **Sort order** (repeatable): `fundoubler --sort size-desc --sort name`
+  - CLI values (kebab-case): `name`, `name-desc`, `size`, `size-desc`, `created`, `created-desc`, `modified`, `modified-desc`
+- **Verbose**: `fundoubler -v` or `fundoubler -vv` (shows wasted space; `-vv` shows config)
+- **Silent**: `fundoubler -s` or `fundoubler --silent` (no console output)
 
 ### Configuration file
 
@@ -137,6 +152,7 @@ Use a TOML file to set defaults; CLI options override the file.
 ```bash
 fundoubler --init-config                    # Creates fundoubler.toml in current directory
 fundoubler --init-config /path/to/my.toml   # Creates config at specified path
+fundoubler --init-config --silent           # Suppress confirmation message
 ```
 
 **Load and use the config file:**
@@ -149,9 +165,13 @@ fundoubler --config fundoubler.toml
 
 ```toml
 path_start = "."
-compare_by_xxh3 = true
 compare_by_size = true
+compare_by_xxh3 = true
 compare_by_name = false
+compare_by_created = false
+compare_by_modified = false
+compare_by_md5 = false
+compare_by_sha512 = false
 min_size = 0
 max_size = 1073741824
 exclude_dirs = ["node_modules", "target", ".git"]
@@ -161,16 +181,22 @@ hash_cache = false
 hash_cache_dir = ".fundoubler/.hashcache"
 log_level = 0
 logs_dir = "./logs"
+delete_log = true
 sort_orders = ["SizeDesc", "Name"]
-dry_run = true
+verbose = 0
+silent = false
 ```
 
-- **exclude_dirs**: Directories to skip during the scan (e.g. `node_modules`, `.git`). Paths can be relative to `path_start` or absolute.
-- **source_dirs**: When duplicates are found across directories, files in these directories are kept; copies in non-source directories are marked for deletion.
+**Key options:**
+- **name_filter**: Regex to match filenames (e.g. `".*\\.(jpg|png)$"`). Omit to include all.
+- **exclude_dirs**: Directories to skip during scan. Paths relative to `path_start` or absolute.
+- **source_dirs**: When duplicates are found, files in these dirs are kept; others marked for deletion.
 - **log_level**: 0 = off, 1 = error, 2 = info, 3 = debug. Logs go to `logs_dir`.
-- **logs_dir**: Directory for log files (default: `./logs`). Files named `YYYYMMDDHHMMSSfun.log`.
+- **logs_dir**: Directory for log files (default `./logs`). Files: `YYYYMMDDHHMMSSfun.log`.
+- **delete_log**: If true (default), record deletions in `logs_dir/del_logs/` for `--restore`.
+- **sort_orders**: In config use PascalCase (`SizeDesc`, `Name`); in CLI use kebab-case (`size-desc`, `name`).
 
-If the config path is missing or invalid, the program exits with an error.
+**Note:** `delete`, `force_delete`, etc. from config are overwritten by CLI. Use CLI flags to trigger deletion.
 
 ## License
 

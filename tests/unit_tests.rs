@@ -757,6 +757,44 @@ fn test_scanner_with_hash_cache() {
 }
 
 #[test]
+fn test_hash_cache_invalid_json_loads_empty() {
+    use std::path::Path;
+    
+    let temp_dir = tempfile::tempdir().unwrap();
+    let cache_path = temp_dir.path().join("cache.json");
+    std::fs::write(&cache_path, "{ invalid json }").unwrap();
+    
+    let cache_dir = temp_dir.path();
+    let cache = HashCache::load(cache_dir);
+    
+    // Should not panic; corrupted cache loads as empty
+    let hash = cache.get(
+        Path::new("/nonexistent"),
+        0,
+        None,
+        "md5",
+    );
+    assert!(hash.is_none());
+}
+
+#[test]
+fn test_hash_cache_unknown_algorithm_returns_none() {
+    use std::path::Path;
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let cache = HashCache::load(temp_dir.path());
+    cache.insert(
+        Path::new("/x"),
+        0,
+        None,
+        "md5",
+        "abc".to_string(),
+    );
+
+    assert!(cache.get(Path::new("/x"), 0, None, "unknown").is_none());
+}
+
+#[test]
 fn test_hash_cache_get_insert_save_load() {
     use std::path::Path;
 
@@ -835,6 +873,38 @@ fn test_hash_calculation_error_handling() {
         result.is_err(),
         "Hash calculation should fail for nonexistent file"
     );
+}
+
+#[test]
+fn test_calculate_hash_unknown_algorithm() {
+    let temp_file = NamedTempFile::new().unwrap();
+    std::fs::write(temp_file.path(), "content").unwrap();
+    
+    let result = calculate_hash(
+        &temp_file.path().to_path_buf(),
+        "unknown_algo",
+        DEFAULT_HASH_BUFFER_SIZE as usize,
+    );
+    
+    assert!(result.is_err(), "Unknown algorithm should return error");
+    let err_msg = result.unwrap_err().to_string();
+    assert!(err_msg.contains("Unknown") || err_msg.contains("unknown"));
+}
+
+#[test]
+fn test_calculate_hash_empty_file() {
+    let temp_file = NamedTempFile::new().unwrap();
+    std::fs::write(temp_file.path(), "").unwrap();
+    
+    let hash_md5 = calculate_hash(
+        &temp_file.path().to_path_buf(),
+        "md5",
+        DEFAULT_HASH_BUFFER_SIZE as usize,
+    )
+    .unwrap();
+    
+    assert!(!hash_md5.is_empty());
+    assert_eq!(hash_md5, "d41d8cd98f00b204e9800998ecf8427e");
 }
 
 #[test]
