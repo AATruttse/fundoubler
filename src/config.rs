@@ -74,6 +74,10 @@ fn default_hash_cache_dir() -> PathBuf {
     PathBuf::from(".fundoubler/.hashcache")
 }
 
+fn default_logs_dir() -> PathBuf {
+    PathBuf::from("./logs")
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, ValueEnum, PartialEq)]
 pub enum SortOrder {
     Name,
@@ -199,6 +203,14 @@ pub struct CliOptions {
     /// Skip confirmation prompts; assume "yes" to all (for scripts, CI)
     #[arg(long)]
     pub skip_confirm: bool,
+
+    /// Logging level: -l error, -ll +info, -lll +debug (default: 0 off)
+    #[arg(short = 'l', long, action = clap::ArgAction::Count)]
+    pub log_level: u8,
+
+    /// Directory for log files (default: ./logs)
+    #[arg(long)]
+    pub logs_dir: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -247,7 +259,11 @@ pub struct ConfigFile {
     pub dry_run: bool,
 
     #[serde(skip_serializing, default)]
-    pub skip_confirm: bool
+    pub skip_confirm: bool,
+
+    pub log_level: u8,
+    #[serde(default = "default_logs_dir", serialize_with = "path_buf_to_str", deserialize_with = "path_buf_from_str")]
+    pub logs_dir: PathBuf,
 }
 
 impl Default for ConfigFile {
@@ -278,6 +294,8 @@ impl Default for ConfigFile {
             force_delete: false,
             dry_run: false,
             skip_confirm: false,
+            log_level: 0,
+            logs_dir: default_logs_dir(),
         }
     }
 }
@@ -377,6 +395,13 @@ impl ConfigFile {
         }
 
         config.skip_confirm = cli.skip_confirm;
+
+        if cli.log_level > 0 {
+            config.log_level = cli.log_level;
+        }
+        if let Some(dir) = &cli.logs_dir {
+            config.logs_dir = dir.clone();
+        }
 
         Ok(config)
     }

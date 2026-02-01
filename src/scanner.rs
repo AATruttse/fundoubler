@@ -49,6 +49,8 @@ impl FileScanner {
         let exclude_dirs = config.exclude_dirs.clone();
         let path_start = config.path_start.clone();
         
+        crate::log::log_debug(&format!("Scanning directory: {}", config.path_start.display()));
+
         // Collect all files first (this is IO bound)
         let entries: Vec<_> = WalkDir::new(&config.path_start)
             .into_iter()
@@ -63,6 +65,8 @@ impl FileScanner {
             .filter(|e| !e.file_type().is_dir())
             .collect();
         
+        crate::log::log_debug(&format!("Collected {} files to process", entries.len()));
+
         if let Some(pb) = &self.progress_bar {
             pb.set_length(entries.len() as u64);
             pb.set_message("Scanning files...");
@@ -79,28 +83,37 @@ impl FileScanner {
             })
             .collect();
         
-        let file_infos: Vec<_> = results
-            .into_iter()
-            .collect::<Result<Vec<_>>>()?
-            .into_iter()
-            .filter_map(|x| x)
-            .collect();
+        let file_infos: Vec<_> = match results.into_iter().collect::<Result<Vec<_>>>() {
+            Ok(v) => v,
+            Err(e) => {
+                crate::log::log_error(&format!("File processing error: {}", e));
+                return Err(e);
+            }
+        }
+        .into_iter()
+        .filter_map(|x| x)
+        .collect();
         
         if let Some(pb) = &self.progress_bar {
             pb.finish_with_message("Scanning complete");
         }
         
         if let Some(cache) = &self.cache {
-            let _ = cache.save();
+            if let Err(e) = cache.save() {
+                crate::log::log_error(&format!("Hash cache save failed: {}", e));
+            } else {
+                crate::log::log_debug("Hash cache saved");
+            }
         }
         
         // Group duplicates
+        crate::log::log_debug(&format!("Grouped {} files into unique keys, filtering duplicates", file_infos.len()));
         let mut groups: HashMap<CheckOptions, Vec<PathBuf>> = HashMap::new();
-        
+
         for (key, path) in file_infos {
             groups.entry(key).or_default().push(path);
         }
-        
+
         // Filter groups with duplicates and apply limit
         let source_dirs = config.source_dirs.clone();
         let path_start = config.path_start.clone();

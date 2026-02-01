@@ -1,9 +1,10 @@
-use clap::Parser; 
+use clap::Parser;
 
 pub mod check;
 pub mod config;
 pub mod error;
 pub mod hash_cache;
+pub mod log;
 pub mod scanner;
 
 pub use check::{CheckOptions, calculate_hash, compare};
@@ -17,8 +18,15 @@ use dialoguer::Confirm;
 
 /// Main application function
 pub fn run() -> Result<()> {
-    // Parse CLI arguments
     let cli = CliOptions::parse();
+
+    // Initialize logging early (from CLI) so config/validation errors are logged
+    if cli.log_level > 0 {
+        let logs_dir = cli.logs_dir.clone().unwrap_or_else(|| std::path::PathBuf::from("./logs"));
+        if let Err(e) = log::init(cli.log_level, &logs_dir) {
+            eprintln!("Warning: failed to init logging: {}", e);
+        }
+    }
 
     // Create default config file and exit if requested
     if let Some(path) = &cli.init_config {
@@ -28,18 +36,39 @@ pub fn run() -> Result<()> {
         let toml = toml::to_string_pretty(&default_config)
             .map_err(|e| AppError::Config(format!("Failed to serialize config: {}", e)))?;
         std::fs::write(path, toml)?;
+        log::log_info(&format!("Created default config at {}", path.display()));
         if !cli.silent {
             println!("Created default config at {}", path.display());
         }
         return Ok(());
     }
-    
+
     // Load configuration (from --config file if set, then CLI overrides)
-    let config = ConfigFile::from_cli(&cli)?;
-    
+    let config = match ConfigFile::from_cli(&cli) {
+        Ok(c) => c,
+        Err(e) => {
+            log::log_error(&format!("Config load failed: {}", e));
+            return Err(e);
+        }
+    };
+
+    // Re-init logger from config (config file may override CLI log settings)
+    if config.log_level > 0 {
+        if let Err(e) = log::init(config.log_level, &config.logs_dir) {
+            eprintln!("Warning: failed to init logging to {:?}: {}", config.logs_dir, e);
+        } else {
+            log::log_info("Logging initialized from config");
+        }
+    }
+
     // Validate configuration
-    config.validate()?;
-    
+    if let Err(e) = config.validate() {
+        log::log_error(&format!("Validation failed: {}", e));
+        return Err(e);
+    }
+
+    log::log_info(&format!("Starting scan at {}", config.path_start.display()));
+
     // Show config if verbose
     if config.verbose > 1 {
         println!("Configuration: {:#?}", config);
@@ -47,8 +76,17 @@ pub fn run() -> Result<()> {
     
     // Scan for duplicates
     let scanner = FileScanner::new(&config, true);
-    let groups = scanner.scan()?;
-    
+    let groups = match scanner.scan() {
+        Ok(g) => {
+            log::log_info(&format!("Scan complete: {} duplicate groups found", g.len()));
+            g
+        }
+        Err(e) => {
+            log::log_error(&format!("Scan failed: {}", e));
+            return Err(e);
+        }
+    };
+
     // Display results
     if !config.silent {
         display_results(&groups, &config);
@@ -56,19 +94,28 @@ pub fn run() -> Result<()> {
     
     // Write to output file if specified
     if let Some(output_path) = &config.output {
-        write_results(&groups, output_path)?;
+        if let Err(e) = write_results(&groups, output_path) {
+            log::log_error(&format!("Failed to write output to {}: {}", output_path.display(), e));
+            return Err(e);
+        }
+        log::log_info(&format!("Results written to {}", output_path.display()));
     }
-    
+
     // Handle deletion
     if config.delete {
-        handle_deletion(&groups, &config)?;
+        if let Err(e) = handle_deletion(&groups, &config) {
+            log::log_error(&format!("Deletion failed: {}", e));
+            return Err(e);
+        }
     }
-    
+
+    log::log_info("Run completed successfully");
     Ok(())
 }
 
 fn display_results(groups: &[FileGroup], config: &ConfigFile) {
     if groups.is_empty() {
+        log::log_info("No duplicates found");
         println!("No duplicates found.");
         return;
     }
@@ -131,10 +178,11 @@ fn write_results(groups: &[FileGroup], output_path: &std::path::Path) -> Result<
 
 fn handle_deletion(groups: &[FileGroup], config: &ConfigFile) -> Result<()> {
     if config.dry_run {
+        log::log_info("Deletion skipped (dry run)");
         println!("\nDRY RUN: No files will be deleted.");
         return Ok(());
     }
-    
+
     if config.force_delete {
         println!("\nWARNING: Force delete enabled. Files will be deleted without confirmation!");
         
@@ -145,12 +193,14 @@ fn handle_deletion(groups: &[FileGroup], config: &ConfigFile) -> Result<()> {
                 .interact()
                 .map_err(|e| AppError::Dialoguer(e))?
             {
+                log::log_info("Deletion cancelled by user");
                 println!("Deletion cancelled.");
                 return Ok(());
             }
         }
+        log::log_info("Force delete confirmed");
     }
-    
+
     let mut deleted_count = 0;
     
     for group in groups {
@@ -187,12 +237,15 @@ fn handle_deletion(groups: &[FileGroup], config: &ConfigFile) -> Result<()> {
                     }
                 }
                 Err(e) => {
-                    eprintln!("Error deleting {}: {}", path.display(), e);
+                    let msg = format!("Error deleting {}: {}", path.display(), e);
+                    log::log_error(&msg);
+                    eprintln!("{}", msg);
                 }
             }
         }
     }
     
+    log::log_info(&format!("Deleted {} duplicate files", deleted_count));
     println!("\nDeleted {} duplicate files.", deleted_count);
     Ok(())
 }

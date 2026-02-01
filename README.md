@@ -60,8 +60,9 @@ Default behavior compares by **size** and **XXH3** hash. You can add or override
 - **Size range (bytes)**: `fundoubler --min-size 1024 --max-size 1048576`
 - **Name pattern (regex)**: `fundoubler --filter ".*\.(jpg|png)$"`
 - **Exclude directories** (repeatable): `fundoubler --exclude-dir node_modules --exclude-dir target`
-- **Source directories** (repeatable): `fundoubler --source-dir /backup/primary` — when duplicates are found, files in source dirs are kept; others are marked for deletion
 - **Limit groups shown**: `fundoubler --limit 10`
+
+### Hash options
 - **Hash buffer size** (bytes, default 64KB): `fundoubler --hash-buffer-size 131072`
 - **Hash cache** (default: off): `fundoubler --hash-cache` — avoid re-hashing on re-scans
 - **Hash cache directory** (default: `.fundoubler/.hashcache`): `fundoubler --hash-cache-dir /path/to/cache`
@@ -72,6 +73,8 @@ Default behavior compares by **size** and **XXH3** hash. You can add or override
 - **Force delete without confirmation (DANGEROUS)**: `fundoubler --delete --force-delete`
 - **Dry run (no deletions)**: `fundoubler --delete --dry-run`
 - **Skip confirmation prompts** (scripts, CI): `fundoubler --skip-confirm` — assumes "yes" to all prompts
+- **Source directories** (repeatable): `fundoubler --source-dir /backup/primary` — when duplicates are found, files in source dirs are kept; others are marked for deletion
+
 
 ### Deletion flag interaction
 
@@ -103,6 +106,13 @@ How `--delete`, `--force-delete`, `--dry-run`, and `--skip-confirm` work togethe
 fundoubler --delete --dry-run /path              # Preview only
 fundoubler --delete --force-delete --skip-confirm /path   # Unattended deletion
 ```
+
+### Logging
+
+- **Logging level** (like verbose, repeatable): `fundoubler -l` (errors), `-ll` (+info), `-lll` (+debug)
+- **Logs directory** (default: `./logs`): `fundoubler --logs-dir /var/log/fundoubler`
+- Log files: `YYYYMMDDHHMMSSfun.log` (e.g. `20260124003905fun.log`)
+- Level 0 = off (default), 1 = errors only, 2 = errors + info, 3+ = errors + info + debug
 
 ### Output control
 
@@ -148,6 +158,8 @@ dry_run = true
 
 - **exclude_dirs**: Directories to skip during the scan (e.g. `node_modules`, `.git`). Paths can be relative to `path_start` or absolute.
 - **source_dirs**: When duplicates are found across directories, files in these directories are kept; copies in non-source directories are marked for deletion.
+- **log_level**: 0 = off, 1 = error, 2 = info, 3 = debug. Logs go to `logs_dir`.
+- **logs_dir**: Directory for log files (default: `./logs`). Files named `YYYYMMDDHHMMSSfun.log`.
 
 If the config path is missing or invalid, the program exits with an error.
 

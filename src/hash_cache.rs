@@ -46,14 +46,25 @@ impl HashCache {
     /// Load cache from directory. Creates dir if needed. Returns empty cache if file missing/invalid.
     pub fn load(cache_dir: &Path) -> Self {
         let path = cache_dir.join("cache.json");
-        let cache = if path.exists() {
-            fs::read_to_string(&path)
-                .ok()
-                .and_then(|s| serde_json::from_str(&s).ok())
-                .unwrap_or_default()
+        let (cache, loaded) = if path.exists() {
+            match fs::read_to_string(&path).and_then(|s| {
+                serde_json::from_str(&s).map_err(|e| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidData, e)
+                })
+            }) {
+                Ok(c) => (c, true),
+                Err(_) => (CacheFile::default(), false),
+            }
         } else {
-            CacheFile::default()
+            (CacheFile::default(), false)
         };
+        if loaded {
+            crate::log::log_debug(&format!(
+                "Hash cache loaded from {} ({} entries)",
+                path.display(),
+                cache.entries.len()
+            ));
+        }
         Self {
             inner: RwLock::new(cache),
             path,

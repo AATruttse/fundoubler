@@ -1,11 +1,11 @@
 [package]
 name = "fundoubler"
-version = "0.2.0"  # Updated version
+version = "0.3.0"  # Updated version
 edition = "2021"
 description = "A cross-platform utility for finding and removing file duplicates"
 authors = ["Anton A. Truttse (Dargot) <dargot@yandex.ru>"]
 license = "MIT"
-repository = "https://github.com/yourusername/fundoubler"
+repository = "https://github.com/AATruttse/fundoubler"
 readme = "README.md"
 
 [dependencies]
