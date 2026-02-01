@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
@@ -19,13 +20,15 @@ pub struct FileScanner {
 
 impl FileScanner {
     pub fn new(config: &ConfigFile, show_progress: bool) -> Self {
-        let progress_bar = if show_progress && !config.silent {
-            let pb = ProgressBar::new_spinner();
+        let progress_bar = if show_progress && !config.silent && !config.no_progress_bar {
+            let pb = ProgressBar::new(0);
             pb.set_style(
-                ProgressStyle::default_spinner()
-                    .template("{spinner:.green} [{elapsed_precise}] {msg}")
-                    .unwrap(),
+                ProgressStyle::default_bar()
+                    .template("{spinner:.green} [{bar:40}] {pos}/{len} {msg}")
+                    .unwrap()
+                    .progress_chars("=>-"),
             );
+            pb.enable_steady_tick(Duration::from_millis(100));
             Some(pb)
         } else {
             None
@@ -68,7 +71,8 @@ impl FileScanner {
         crate::log::log_debug(&format!("Collected {} files to process", entries.len()));
 
         if let Some(pb) = &self.progress_bar {
-            pb.set_length(entries.len() as u64);
+            let len = entries.len().max(1) as u64;
+            pb.set_length(len);
             pb.set_message("Scanning files...");
         }
         
@@ -95,6 +99,7 @@ impl FileScanner {
         .collect();
         
         if let Some(pb) = &self.progress_bar {
+            pb.disable_steady_tick();
             pb.finish_with_message("Scanning complete");
         }
         

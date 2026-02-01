@@ -187,6 +187,10 @@ pub struct CliOptions {
     /// Silent mode (no output)
     #[arg(short = 's', long)]
     pub silent: bool,
+
+    /// Disable progress bar during scan
+    #[arg(long)]
+    pub no_progress_bar: bool,
     
     /// Configuration file
     #[arg(long)]
@@ -260,6 +264,7 @@ pub struct ConfigFile {
     pub limit: Option<usize>,
     pub verbose: u8,
     pub silent: bool,
+    pub no_progress_bar: bool,
     
     // Deletion
     pub delete: bool,
@@ -300,6 +305,7 @@ impl Default for ConfigFile {
             limit: None,
             verbose: 0,
             silent: false,
+            no_progress_bar: false,
             delete: false,
             force_delete: false,
             dry_run: false,
@@ -373,6 +379,9 @@ impl ConfigFile {
         config.dry_run = cli.dry_run;
         config.silent = cli.silent;
         config.verbose = if config.silent { 0 } else { cli.verbose };
+        if cli.no_progress_bar {
+            config.no_progress_bar = true;
+        }
 
         if let Some(min) = cli.min_size {
             config.min_size = min;

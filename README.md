@@ -141,7 +141,10 @@ fundoubler --delete --force-delete --skip-confirm /path   # Unattended deletion
 - **Sort order** (repeatable): `fundoubler --sort size-desc --sort name`
   - CLI values (kebab-case): `name`, `name-desc`, `size`, `size-desc`, `created`, `created-desc`, `modified`, `modified-desc`
 - **Verbose**: `fundoubler -v` or `fundoubler -vv` (shows wasted space; `-vv` shows config)
-- **Silent**: `fundoubler -s` or `fundoubler --silent` (no console output)
+- **Silent**: `fundoubler -s` or `fundoubler --silent` (no console output; also disables progress bar)
+- **No progress bar**: `fundoubler --no-progress-bar` — hide the scan progress bar (scripts, CI)
+
+The progress bar shows file count (e.g. `[=>---] 50/100 Scanning files...`) during the scan. It appears on stderr and is visible only when running in an interactive terminal (not when piping output).
 
 ### Configuration file
 
@@ -185,6 +188,7 @@ delete_log = true
 sort_orders = ["SizeDesc", "Name"]
 verbose = 0
 silent = false
+no_progress_bar = false
 ```
 
 **Key options:**
@@ -195,6 +199,7 @@ silent = false
 - **logs_dir**: Directory for log files (default `./logs`). Files: `YYYYMMDDHHMMSSfun.log`.
 - **delete_log**: If true (default), record deletions in `logs_dir/del_logs/` for `--restore`.
 - **sort_orders**: In config use PascalCase (`SizeDesc`, `Name`); in CLI use kebab-case (`size-desc`, `name`).
+- **no_progress_bar**: If true, hide the scan progress bar.
 
 **Note:** `delete`, `force_delete`, etc. from config are overwritten by CLI. Use CLI flags to trigger deletion.
 

@@ -627,12 +627,33 @@ fn test_silent_mode() {
         stderr
     );
     
-    // In silent mode stdout should be empty
+    // In silent mode stdout and stderr should be empty (no output, no progress bar)
     assert!(
         stdout.trim().is_empty(),
-        "Silent mode should produce no output, got: {}",
+        "Silent mode should produce no stdout, got: {}",
         stdout
     );
+    assert!(
+        stderr.trim().is_empty(),
+        "Silent mode should produce no stderr (progress bar disabled), got: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_no_progress_bar() {
+    let temp_dir = TempDir::new().unwrap();
+    create_test_file(&temp_dir, "a.txt", "x");
+    create_test_file(&temp_dir, "b.txt", "x");
+
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--md5",
+        "--no-progress-bar",
+    ]);
+
+    assert!(status.success(), "stderr: {}", stderr);
+    assert!(stdout.contains("a.txt") || stdout.contains("b.txt"));
 }
 
 #[test]
@@ -925,6 +946,7 @@ fn test_init_config_includes_all_fields() {
     assert!(content.contains("log_level"));
     assert!(content.contains("logs_dir"));
     assert!(content.contains("delete_log"));
+    assert!(content.contains("no_progress_bar"));
 }
 
 #[test]

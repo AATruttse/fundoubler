@@ -689,6 +689,48 @@ fn test_config_from_cli_hash_buffer_size() {
 }
 
 #[test]
+fn test_config_from_cli_no_progress_bar() {
+    use clap::Parser;
+    use fundoubler::config::{CliOptions, ConfigFile};
+
+    let config = ConfigFile::from_cli(&CliOptions::parse_from([
+        "fundoubler",
+        ".",
+        "--no-progress-bar",
+    ]))
+    .unwrap();
+    assert!(config.no_progress_bar);
+}
+
+#[test]
+fn test_config_file_no_progress_bar() {
+    use clap::Parser;
+    use fundoubler::config::{CliOptions, ConfigFile};
+
+    let temp = tempfile::tempdir().unwrap();
+    let config_path = temp.path().join("config.toml");
+    std::fs::write(
+        &config_path,
+        r#"
+path_start = "."
+no_progress_bar = true
+compare_by_size = true
+compare_by_xxh3 = true
+"#,
+    )
+    .unwrap();
+
+    let config = ConfigFile::from_cli(&CliOptions::parse_from([
+        "fundoubler",
+        "--config",
+        config_path.to_str().unwrap(),
+        ".",
+    ]))
+    .unwrap();
+    assert!(config.no_progress_bar);
+}
+
+#[test]
 fn test_config_from_cli_hash_cache_options() {
     use clap::Parser;
     use fundoubler::config::{CliOptions, ConfigFile};
