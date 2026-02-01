@@ -1,7 +1,8 @@
 use fundoubler::check::{CheckOptions, calculate_hash, compare};
-use fundoubler::DEFAULT_HASH_BUFFER_SIZE;
 use fundoubler::config::{ConfigFile, SortOrder};
+use fundoubler::hash_cache::HashCache;
 use fundoubler::scanner::FileScanner;
+use fundoubler::DEFAULT_HASH_BUFFER_SIZE;
 use tempfile::NamedTempFile;
 
 #[test]
@@ -674,6 +675,126 @@ limit = 10
 
     assert_eq!(config.min_size, 200, "CLI --min-size should override file");
     assert_eq!(config.limit, Some(3), "CLI --limit should override file");
+}
+
+#[test]
+fn test_config_from_cli_hash_buffer_size() {
+    use clap::Parser;
+    use fundoubler::config::{CliOptions, ConfigFile};
+
+    let args = ["fundoubler", "--hash-buffer-size", "131072"];
+    let cli = CliOptions::parse_from(args);
+    let config = ConfigFile::from_cli(&cli).expect("from_cli should succeed");
+    assert_eq!(config.hash_buffer_size, 131072);
+}
+
+#[test]
+fn test_config_from_cli_hash_cache_options() {
+    use clap::Parser;
+    use fundoubler::config::{CliOptions, ConfigFile};
+    use std::path::PathBuf;
+
+    let args = ["fundoubler", "--hash-cache", "--hash-cache-dir", "/tmp/my_cache"];
+    let cli = CliOptions::parse_from(args);
+    let config = ConfigFile::from_cli(&cli).expect("from_cli should succeed");
+    assert!(config.hash_cache);
+    assert_eq!(config.hash_cache_dir, PathBuf::from("/tmp/my_cache"));
+}
+
+#[test]
+fn test_config_from_cli_config_file_hash_cache_and_buffer() {
+    use clap::Parser;
+    use fundoubler::config::{CliOptions, ConfigFile};
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("fundoubler.toml");
+    std::fs::write(
+        &config_path,
+        r#"
+path_start = "."
+compare_by_size = true
+compare_by_xxh3 = true
+hash_cache = true
+hash_cache_dir = "./my_hash_cache"
+hash_buffer_size = 32768
+"#,
+    )
+    .unwrap();
+
+    let args = ["fundoubler", "--config", config_path.to_str().unwrap()];
+    let cli = CliOptions::parse_from(args);
+    let config = ConfigFile::from_cli(&cli).expect("from_cli should succeed");
+    assert!(config.hash_cache);
+    assert_eq!(config.hash_buffer_size, 32768);
+    assert!(config.hash_cache_dir.to_string_lossy().contains("my_hash_cache"));
+}
+
+#[test]
+fn test_scanner_with_hash_cache() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let cache_dir = temp_dir.path().join("cache");
+    std::fs::create_dir_all(&cache_dir).unwrap();
+
+    std::fs::write(temp_dir.path().join("a.txt"), "same").unwrap();
+    std::fs::write(temp_dir.path().join("b.txt"), "same").unwrap();
+
+    let mut config = ConfigFile::default();
+    config.path_start = temp_dir.path().to_path_buf();
+    config.compare_by_xxh3 = true;
+    config.compare_by_size = true;
+    config.hash_cache = true;
+    config.hash_cache_dir = cache_dir.clone();
+
+    let scanner = FileScanner::new(&config, false);
+    let groups1 = scanner.scan().unwrap();
+    assert_eq!(groups1.len(), 1);
+    assert_eq!(groups1[0].paths.len(), 2);
+
+    let scanner2 = FileScanner::new(&config, false);
+    let groups2 = scanner2.scan().unwrap();
+    assert_eq!(groups2.len(), 1);
+    assert_eq!(groups2[0].paths.len(), 2);
+}
+
+#[test]
+fn test_hash_cache_get_insert_save_load() {
+    use std::path::Path;
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let cache_dir = temp_dir.path().join("cache");
+    let cache = HashCache::load(&cache_dir);
+
+    let path = Path::new("/some/file.txt");
+    let size = 100u64;
+    let mtime = std::time::SystemTime::now();
+
+    assert!(cache.get(path, size, Some(mtime), "md5").is_none());
+    cache.insert(path, size, Some(mtime), "md5", "abc123".to_string());
+    assert_eq!(cache.get(path, size, Some(mtime), "md5").as_deref(), Some("abc123"));
+
+    cache.save().expect("save should succeed");
+    assert!(cache_dir.join("cache.json").exists());
+
+    let loaded = HashCache::load(&cache_dir);
+    assert_eq!(
+        loaded.get(path, size, Some(mtime), "md5").as_deref(),
+        Some("abc123")
+    );
+}
+
+#[test]
+fn test_config_from_cli_config_file_invalid_toml_errors() {
+    use clap::Parser;
+    use fundoubler::config::{CliOptions, ConfigFile};
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("bad.toml");
+    std::fs::write(&config_path, "invalid toml {{{").unwrap();
+
+    let args = ["fundoubler", "--config", config_path.to_str().unwrap()];
+    let cli = CliOptions::parse_from(args);
+    let result = ConfigFile::from_cli(&cli);
+    assert!(result.is_err());
 }
 
 #[test]

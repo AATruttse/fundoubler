@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use indicatif::{ProgressBar, ProgressStyle};
@@ -46,11 +46,20 @@ impl FileScanner {
     
     pub fn scan(&self) -> Result<Vec<FileGroup>> {
         let config = self.config.clone();
+        let exclude_dirs = config.exclude_dirs.clone();
+        let path_start = config.path_start.clone();
         
         // Collect all files first (this is IO bound)
         let entries: Vec<_> = WalkDir::new(&config.path_start)
             .into_iter()
-            .filter_map(|e| e.ok())  // Fixed: was filter_map(Result::ok)
+            .filter_entry(|e| {
+                if e.file_type().is_dir() {
+                    !path_is_excluded(e.path(), &exclude_dirs, &path_start)
+                } else {
+                    true
+                }
+            })
+            .filter_map(|e| e.ok())
             .filter(|e| !e.file_type().is_dir())
             .collect();
         
@@ -93,10 +102,15 @@ impl FileScanner {
         }
         
         // Filter groups with duplicates and apply limit
+        let source_dirs = config.source_dirs.clone();
+        let path_start = config.path_start.clone();
         let mut result: Vec<_> = groups
             .into_iter()
             .filter(|(_, paths)| paths.len() > 1)
-            .map(|(key, paths)| FileGroup { key, paths })
+            .map(|(key, mut paths)| {
+                sort_paths_source_first(&mut paths, &source_dirs, &path_start);
+                FileGroup { key, paths }
+            })
             .collect();
         
         // Sort groups
@@ -204,4 +218,65 @@ impl FileScanner {
 pub struct FileGroup {
     pub key: CheckOptions,
     pub paths: Vec<PathBuf>,
+}
+
+/// Returns true if the given directory path should be excluded from the scan.
+fn path_is_excluded(dir_path: &Path, exclude_dirs: &[PathBuf], path_start: &Path) -> bool {
+    if exclude_dirs.is_empty() {
+        return false;
+    }
+    let d = normalize_path(dir_path);
+    for exclude in exclude_dirs {
+        let e = if exclude.is_absolute() {
+            normalize_path(exclude)
+        } else {
+            let resolved = path_start.join(exclude);
+            normalize_path(&resolved)
+        };
+        if d == e || d.starts_with(&format!("{}/", e)) || d.starts_with(&e) {
+            return true;
+        }
+    }
+    false
+}
+
+fn normalize_path(p: &Path) -> String {
+    p.to_string_lossy().replace('\\', "/")
+}
+
+/// Sort paths so files in source_dirs come first (and will be kept during deletion).
+fn sort_paths_source_first(paths: &mut [PathBuf], source_dirs: &[PathBuf], path_start: &Path) {
+    if source_dirs.is_empty() {
+        paths.sort();
+        return;
+    }
+    paths.sort_by(|a, b| {
+        let a_in = path_is_in_source(a, source_dirs, path_start);
+        let b_in = path_is_in_source(b, source_dirs, path_start);
+        match (a_in, b_in) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.cmp(b),
+        }
+    });
+}
+
+fn path_is_in_source(file_path: &Path, source_dirs: &[PathBuf], path_start: &Path) -> bool {
+    if source_dirs.is_empty() {
+        return false;
+    }
+    let parent = file_path.parent().unwrap_or(file_path);
+    let p = normalize_path(parent);
+    for source in source_dirs {
+        let s = if source.is_absolute() {
+            normalize_path(source)
+        } else {
+            let resolved = path_start.join(source);
+            normalize_path(&resolved)
+        };
+        if p == s || p.starts_with(&format!("{}/", s)) || p.starts_with(&s) {
+            return true;
+        }
+    }
+    false
 }

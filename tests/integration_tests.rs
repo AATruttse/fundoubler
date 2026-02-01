@@ -927,6 +927,8 @@ fn test_init_config_includes_all_fields() {
     assert!(content.contains("hash_cache"));
     assert!(content.contains("hash_cache_dir"));
     assert!(content.contains("hash_buffer_size"));
+    assert!(content.contains("exclude_dirs"));
+    assert!(content.contains("source_dirs"));
 }
 
 #[test]
@@ -1149,3 +1151,5 @@ fn test_wasted_space_calculation() {
         "Verbose output should show wasted space calculation"
     );
 }
+
+// Exclude and source directory tests moved to tests/exclude_source_tests.rs

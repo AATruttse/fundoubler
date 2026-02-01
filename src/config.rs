@@ -44,6 +44,24 @@ where
     Ok(opt.map(PathBuf::from))
 }
 
+/// Serialize Vec<PathBuf> as array of strings for TOML.
+fn vec_path_to_str<S>(v: &[PathBuf], s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let strs: Vec<String> = v.iter().map(|p| p.to_string_lossy().to_string()).collect();
+    strs.serialize(s)
+}
+
+/// Deserialize array of strings into Vec<PathBuf>.
+fn vec_path_from_str<'de, D>(d: D) -> Result<Vec<PathBuf>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let v: Vec<String> = Vec::deserialize(d)?;
+    Ok(v.into_iter().map(PathBuf::from).collect())
+}
+
 fn default_path_start() -> PathBuf {
     PathBuf::from(".")
 }
@@ -134,6 +152,14 @@ pub struct CliOptions {
     #[arg(long)]
     pub filter: Option<String>,
     
+    /// Directory to exclude from search (can be repeated)
+    #[arg(long)]
+    pub exclude_dir: Vec<PathBuf>,
+    
+    /// Directory treated as source (files here are kept over duplicates elsewhere)
+    #[arg(long)]
+    pub source_dir: Vec<PathBuf>,
+    
     /// Hash read buffer size in bytes (default: 64KB)
     #[arg(long)]
     pub hash_buffer_size: Option<u64>,
@@ -197,6 +223,10 @@ pub struct ConfigFile {
     pub min_size: u64,
     pub max_size: u64,
     pub name_filter: Option<String>,
+    #[serde(default, serialize_with = "vec_path_to_str", deserialize_with = "vec_path_from_str")]
+    pub exclude_dirs: Vec<PathBuf>,
+    #[serde(default, serialize_with = "vec_path_to_str", deserialize_with = "vec_path_from_str")]
+    pub source_dirs: Vec<PathBuf>,
     
     #[serde(default = "default_hash_buffer_size")]
     pub hash_buffer_size: u64,
@@ -235,6 +265,8 @@ impl Default for ConfigFile {
             min_size: 0,
             max_size: u64::MAX,
             name_filter: None,
+            exclude_dirs: Vec::new(),
+            source_dirs: Vec::new(),
             hash_buffer_size: DEFAULT_HASH_BUFFER_SIZE,
             hash_cache: false,
             hash_cache_dir: default_hash_cache_dir(),
@@ -321,6 +353,12 @@ impl ConfigFile {
         }
         if let Some(filter) = &cli.filter {
             config.name_filter = Some(filter.clone());
+        }
+        if !cli.exclude_dir.is_empty() {
+            config.exclude_dirs = cli.exclude_dir.clone();
+        }
+        if !cli.source_dir.is_empty() {
+            config.source_dirs = cli.source_dir.clone();
         }
         if let Some(buf) = cli.hash_buffer_size {
             config.hash_buffer_size = buf;

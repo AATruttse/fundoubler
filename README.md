@@ -59,6 +59,8 @@ Default behavior compares by **size** and **XXH3** hash. You can add or override
 
 - **Size range (bytes)**: `fundoubler --min-size 1024 --max-size 1048576`
 - **Name pattern (regex)**: `fundoubler --filter ".*\.(jpg|png)$"`
+- **Exclude directories** (repeatable): `fundoubler --exclude-dir node_modules --exclude-dir target`
+- **Source directories** (repeatable): `fundoubler --source-dir /backup/primary` — when duplicates are found, files in source dirs are kept; others are marked for deletion
 - **Limit groups shown**: `fundoubler --limit 10`
 - **Hash buffer size** (bytes, default 64KB): `fundoubler --hash-buffer-size 131072`
 - **Hash cache** (default: off): `fundoubler --hash-cache` — avoid re-hashing on re-scans
@@ -135,12 +137,17 @@ compare_by_size = true
 compare_by_name = false
 min_size = 0
 max_size = 1073741824
+exclude_dirs = ["node_modules", "target", ".git"]
+source_dirs = ["./backup", "/primary/photos"]
 hash_buffer_size = 65536
 hash_cache = false
 hash_cache_dir = ".fundoubler/.hashcache"
 sort_orders = ["SizeDesc", "Name"]
 dry_run = true
 ```
+
+- **exclude_dirs**: Directories to skip during the scan (e.g. `node_modules`, `.git`). Paths can be relative to `path_start` or absolute.
+- **source_dirs**: When duplicates are found across directories, files in these directories are kept; copies in non-source directories are marked for deletion.
 
 If the config path is missing or invalid, the program exits with an error.
 
