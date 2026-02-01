@@ -144,34 +144,27 @@ fn test_delete_keeps_first_file_in_group() {
 #[test]
 fn test_actual_deletion_with_force() {
     let temp_dir = TempDir::new().unwrap();
-    
-    // Create temporary copy of files for safe deletion
-    let file_to_keep = temp_dir.child("keep.txt");
-    file_to_keep.write_str("content").unwrap();
-    
-    let file_to_delete = temp_dir.child("delete.txt");
-    file_to_delete.write_str("content").unwrap();
-    
-    // Ensure both files exist before deletion
-    assert!(file_to_keep.exists());
-    assert!(file_to_delete.exists());
-    
-    // Use --force-delete and --skip-confirm to avoid interactivity
+
+    let file_kept = temp_dir.child("delete.txt"); // Alphabetically first -> kept
+    file_kept.write_str("content").unwrap();
+    let file_deleted = temp_dir.child("keep.txt"); // Alphabetically second -> deleted
+    file_deleted.write_str("content").unwrap();
+
+    assert!(file_kept.exists());
+    assert!(file_deleted.exists());
+
     let (_stdout, stderr, status) = run_fundoubler(&[
         temp_dir.path().to_str().unwrap(),
         "--md5",
         "--delete",
         "--force-delete",
         "--skip-confirm",
-        "--sort=name", // "delete.txt" comes before "keep.txt", so "keep.txt" should be deleted
+        "--sort=name", // delete.txt < keep.txt => delete.txt kept, keep.txt deleted
     ]);
-    
-    // In force-delete mode program should complete without errors
-    assert!(
-        status.success(),
-        "Force-delete run should succeed, stderr: {}",
-        stderr
-    );
+
+    assert!(status.success(), "Force-delete should succeed, stderr: {}", stderr);
+    assert!(file_kept.exists(), "First (delete.txt) should be kept");
+    assert!(!file_deleted.exists(), "Second (keep.txt) should be deleted");
 }
 
 #[test]
@@ -973,23 +966,53 @@ fn test_invalid_path() {
 }
 
 #[test]
+fn test_config_validation_fails_with_no_criteria() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("bad_cfg.toml");
+
+    fs::write(
+        &config_path,
+        r#"
+path_start = "."
+compare_by_size = false
+compare_by_xxh3 = false
+compare_by_name = false
+compare_by_created = false
+compare_by_modified = false
+compare_by_md5 = false
+compare_by_sha512 = false
+"#,
+    )
+    .unwrap();
+
+    create_test_file(&temp_dir, "a.txt", "x");
+
+    let (_stdout, stderr, status) = run_fundoubler(&[
+        "--config",
+        config_path.to_str().unwrap(),
+        temp_dir.path().to_str().unwrap(),
+    ]);
+
+    assert!(!status.success(), "Config with no criteria should fail");
+    assert!(stderr.contains("comparison") || stderr.contains("criteria") || stderr.contains("Configuration"));
+}
+
+#[test]
 fn test_invalid_regex_filter() {
     let temp_dir = TempDir::new().unwrap();
-    
+
     create_test_file(&temp_dir, "file1.txt", "content");
-    
-    // Test verifies that program doesn't panic on invalid regex
-    // Regex error may be handled in scanner.process_file and result
-    // in empty output, or program may exit with error
-    let (_stdout, _stderr, status) = run_fundoubler(&[
+
+    let (_stdout, stderr, status) = run_fundoubler(&[
         temp_dir.path().to_str().unwrap(),
-        "--filter", "[invalid regex",
+        "--filter",
+        "[invalid regex",
     ]);
-    
-    // Main thing - program should complete (not panic)
+
     assert!(
-        status.code().is_some(),
-        "Program should complete without panicking for invalid regex"
+        !status.success(),
+        "Invalid regex should cause program to fail, stderr: {}",
+        stderr
     );
 }
 
@@ -1151,6 +1174,78 @@ fn test_wasted_space_calculation() {
     assert!(
         stdout.contains("Wasted space") || stdout.contains("wasted") || stdout.contains("40"),
         "Verbose output should show wasted space calculation"
+    );
+}
+
+#[test]
+fn test_output_via_config_file() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("cfg.toml");
+    let output_path = temp_dir.path().join("report.txt");
+    let path_str = temp_dir.path().to_str().unwrap().replace('\\', "/");
+    let output_str = output_path.to_str().unwrap().replace('\\', "/");
+
+    fs::write(
+        &config_path,
+        format!(
+            r#"
+path_start = "{}"
+output = "{}"
+compare_by_size = true
+compare_by_xxh3 = true
+"#,
+            path_str, output_str
+        ),
+    )
+    .unwrap();
+
+    create_test_file(&temp_dir, "a.txt", "dup");
+    create_test_file(&temp_dir, "b.txt", "dup");
+
+    let (_stdout, stderr, status) = run_fundoubler(&[
+        "--config",
+        config_path.to_str().unwrap(),
+        temp_dir.path().to_str().unwrap(),
+    ]);
+    assert!(status.success(), "stderr: {}", stderr);
+    assert!(output_path.exists(), "Output file from config should be created");
+    let content = fs::read_to_string(&output_path).unwrap();
+    assert!(content.contains("a.txt") || content.contains("b.txt"));
+}
+
+#[test]
+fn test_init_config_silent_suppresses_output() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("silent_config.toml");
+
+    let (stdout, stderr, status) = run_fundoubler(&[
+        "--init-config",
+        config_path.to_str().unwrap(),
+        "--silent",
+    ]);
+    assert!(status.success(), "stderr: {}", stderr);
+    assert!(
+        !stdout.contains("Created default config"),
+        "Silent mode should suppress init-config message"
+    );
+    assert!(config_path.exists());
+}
+
+#[test]
+fn test_size_only_comparison_no_hashing() {
+    let temp_dir = TempDir::new().unwrap();
+    // Same size (10 bytes), different content - with --size only they should be duplicates
+    create_test_file(&temp_dir, "a.txt", "1234567890");
+    create_test_file(&temp_dir, "b.txt", "abcdefghij");
+
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp_dir.path().to_str().unwrap(),
+        "--size",
+    ]);
+    assert!(status.success(), "stderr: {}", stderr);
+    assert!(
+        stdout.contains("a.txt") && stdout.contains("b.txt"),
+        "--size only should find size-duplicates without hashing"
     );
 }
 
