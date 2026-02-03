@@ -6,7 +6,7 @@ A fast, cross-platform utility for finding and removing file duplicates written 
 
 - **Fast scanning**: Uses parallel processing for large directories
 - **Multiple comparison methods**: Size, name, creation/modification dates, and hash algorithms (MD5, SHA512, XXH3)
-- **Smart filtering**: Filter by size, name patterns (regex), exclude directories
+- **Smart filtering**: Filter by size, name patterns (regex), time ranges (creation/modification), user and group (Unix), exclude directories
 - **Source directories**: Prefer files in specified dirs when choosing which duplicate to keep
 - **Safe deletion**: Interactive per-file confirmation, dry-run mode, or unattended with `--skip-confirm`
 - **Delete log and restore**: Records deletions for undo; restore files from logs with `--restore`
@@ -34,7 +34,7 @@ fundoubler [OPTIONS] [PATH_START] [OUTPUT]
 ```
 
 - **PATH_START**: Directory to scan (default: current directory `.`)
-- **OUTPUT**: Optional file to write results to (positional, after path)
+- **OUTPUT**: Optional file to write duplicate report to (positional, after PATH_START). Omit to print to stdout.
 
 **Modes** (mutually exclusive):
 - **Normal scan**: Find duplicates in `PATH_START`, optionally delete, write report
@@ -72,6 +72,13 @@ Default behavior compares by **size** and **XXH3** hash. Via CLI or config file:
 
 - **Size range (bytes)**: `fundoubler --min-size 1024 --max-size 1048576`
 - **Name pattern (regex)**: `fundoubler --filter ".*\.(jpg|png)$"`
+- **Creation time range**: `fundoubler --min-create-time 2024-01-01 --max-create-time 2024-12-31`
+- **Modification time range**: `fundoubler --min-mod-time 2024-01-01 --max-mod-time 2024-12-31`
+
+  Time format: `YYYY-MM-DD`, `YYYY-MM-DD HH:MM:SS`, `YYYY-MM-DDTHH:MM:SS`, RFC 3339, or Unix timestamp. Works on Windows and Linux.
+
+- **User filter** (Unix only; ignored on Windows): `fundoubler --user-filter myuser` or `--user-filter 1000` — only files owned by this user
+- **Group filter** (Unix only; ignored on Windows): `fundoubler --group-filter mygroup` or `--group-filter 100` — only files in this group
 - **Exclude directories** (repeatable): `fundoubler --exclude-dir node_modules --exclude-dir target`
 - **Source directories** (repeatable): `fundoubler --source-dir /backup/primary` — when duplicates are found, files in source dirs are kept; others are marked for deletion
 - **Limit groups shown**: `fundoubler --limit 10`
@@ -177,6 +184,13 @@ compare_by_md5 = false
 compare_by_sha512 = false
 min_size = 0
 max_size = 1073741824
+# name_filter = ".*\\.(jpg|png)$"   # Regex to match filenames
+# min_create_time = "2024-01-01"
+# max_create_time = "2024-12-31"
+# min_mod_time = "2024-02-01"
+# max_mod_time = "2024-11-30"
+# user_filter = "myuser"   # Unix only; ignored on Windows
+# group_filter = "mygroup" # Unix only; ignored on Windows
 exclude_dirs = ["node_modules", "target", ".git"]
 source_dirs = ["./backup", "/primary/photos"]
 hash_buffer_size = 65536
@@ -192,16 +206,23 @@ no_progress_bar = false
 ```
 
 **Key options:**
-- **name_filter**: Regex to match filenames (e.g. `".*\\.(jpg|png)$"`). Omit to include all.
+- **name_filter**: Regex to match filenames (e.g. `".*\\.(jpg|png)$"`). Omit to include all. CLI: `--filter`.
+- **min_create_time, max_create_time**: Only include files created within this range.
+- **min_mod_time, max_mod_time**: Only include files modified within this range.
+
+  Time formats: `YYYY-MM-DD`, `YYYY-MM-DD HH:MM:SS`, `YYYY-MM-DDTHH:MM:SS`, RFC 3339, Unix timestamp. On some Linux filesystems creation time may be unavailable; those files are then included.
+
+- **user_filter, group_filter**: (Unix only; ignored on Windows) Only include files owned by this user / in this group. Use username or numeric uid/gid.
 - **exclude_dirs**: Directories to skip during scan. Paths relative to `path_start` or absolute.
 - **source_dirs**: When duplicates are found, files in these dirs are kept; others marked for deletion.
 - **log_level**: 0 = off, 1 = error, 2 = info, 3 = debug. Logs go to `logs_dir`.
 - **logs_dir**: Directory for log files (default `./logs`). Files: `YYYYMMDDHHMMSSfun.log`.
 - **delete_log**: If true (default), record deletions in `logs_dir/del_logs/` for `--restore`.
 - **sort_orders**: In config use PascalCase (`SizeDesc`, `Name`); in CLI use kebab-case (`size-desc`, `name`).
+- **limit**: Maximum number of duplicate groups to display (e.g. `limit = 10`).
 - **no_progress_bar**: If true, hide the scan progress bar.
 
-**Note:** `delete`, `force_delete`, etc. from config are overwritten by CLI. Use CLI flags to trigger deletion.
+**Note:** `delete`, `force_delete`, and `dry_run` from config are overwritten by CLI. Use `--delete`, `--force-delete`, or `--dry-run` to control deletion behavior.
 
 ## License
 

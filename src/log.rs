@@ -63,11 +63,13 @@ pub fn init(level: u8, logs_dir: &std::path::Path) -> std::io::Result<()> {
         }
     };
 
-    let m = LOGGER.get_or_init(|| Mutex::new(LoggerState {
-        level: LogLevel::Off,
-        file_path: None,
-        file_handle: None,
-    }));
+    let m = LOGGER.get_or_init(|| {
+        Mutex::new(LoggerState {
+            level: LogLevel::Off,
+            file_path: None,
+            file_handle: None,
+        })
+    });
     *m.lock().expect("logger mutex poisoned") = state;
     Ok(())
 }
@@ -75,9 +77,9 @@ pub fn init(level: u8, logs_dir: &std::path::Path) -> std::io::Result<()> {
 /// Return the current log file path if logging is active. For tests.
 #[doc(hidden)]
 pub fn current_log_path() -> Option<PathBuf> {
-    LOGGER.get().and_then(|m| {
-        m.lock().ok().and_then(|s| s.file_path.clone())
-    })
+    LOGGER
+        .get()
+        .and_then(|m| m.lock().ok().and_then(|s| s.file_path.clone()))
 }
 
 fn write_log(level: LogLevel, msg: &str) {
@@ -95,7 +97,13 @@ fn write_log(level: LogLevel, msg: &str) {
                     LogLevel::Debug => "DEBUG",
                     LogLevel::Off => return,
                 };
-                let _ = writeln!(f, "[{}] [{}] {}", now.format("%Y-%m-%d %H:%M:%S%.3f"), level_str, msg);
+                let _ = writeln!(
+                    f,
+                    "[{}] [{}] {}",
+                    now.format("%Y-%m-%d %H:%M:%S%.3f"),
+                    level_str,
+                    msg
+                );
                 let _ = f.flush();
             }
         }

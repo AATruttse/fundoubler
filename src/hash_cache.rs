@@ -48,9 +48,8 @@ impl HashCache {
         let path = cache_dir.join("cache.json");
         let (cache, loaded) = if path.exists() {
             match fs::read_to_string(&path).and_then(|s| {
-                serde_json::from_str(&s).map_err(|e| {
-                    std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-                })
+                serde_json::from_str(&s)
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
             }) {
                 Ok(c) => (c, true),
                 Err(_) => (CacheFile::default(), false),
@@ -116,9 +115,10 @@ impl HashCache {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let cache = self.inner.read().map_err(|_| {
-            std::io::Error::new(std::io::ErrorKind::Other, "cache lock poisoned")
-        })?;
+        let cache = self
+            .inner
+            .read()
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "cache lock poisoned"))?;
         let json = serde_json::to_string_pretty(&*cache)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
         fs::write(&self.path, json)

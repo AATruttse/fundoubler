@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 
 use chrono::{DateTime, Utc};
-use md5;  // Added
+use md5; // Added
 use serde::{Deserialize, Serialize};
 
 use crate::config::SortOrder;
@@ -35,7 +35,11 @@ impl CheckOptions {
 }
 
 /// Compare two CheckOptions based on multiple criteria
-pub fn compare(cfg: &crate::config::ConfigFile, opt0: &CheckOptions, opt1: &CheckOptions) -> Ordering {
+pub fn compare(
+    cfg: &crate::config::ConfigFile,
+    opt0: &CheckOptions,
+    opt1: &CheckOptions,
+) -> Ordering {
     for order in &cfg.sort_orders {
         match order {
             SortOrder::Name => {
@@ -88,56 +92,63 @@ pub fn compare(cfg: &crate::config::ConfigFile, opt0: &CheckOptions, opt1: &Chec
             }
         }
     }
-    
+
     Ordering::Equal
 }
 
 impl fmt::Display for CheckOptions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut parts = Vec::new();
-        
+
         if let Some(name) = &self.name {
             parts.push(format!("Name: {}", name));
         }
-        
+
         if let Some(size) = &self.size {
             parts.push(format!("Size: {} bytes", size));
         }
-        
+
         if let Some(created) = &self.created {
             let datetime: DateTime<Utc> = (*created).into();
             parts.push(format!("Created: {}", datetime.format("%Y-%m-%d %H:%M:%S")));
         }
-        
+
         if let Some(modified) = &self.modified {
             let datetime: DateTime<Utc> = (*modified).into();
-            parts.push(format!("Modified: {}", datetime.format("%Y-%m-%d %H:%M:%S")));
+            parts.push(format!(
+                "Modified: {}",
+                datetime.format("%Y-%m-%d %H:%M:%S")
+            ));
         }
-        
+
         if let Some(md5) = &self.md5 {
             parts.push(format!("MD5: {}", md5));
         }
-        
+
         if let Some(sha512) = &self.sha512 {
             parts.push(format!("SHA512: {}", sha512));
         }
-        
+
         if let Some(xxh3) = &self.xxh3 {
             parts.push(format!("XXH3: {}", xxh3));
         }
-        
+
         write!(f, "{}", parts.join(" | "))
     }
 }
 
 /// Calculate file hash using specified algorithm
-pub fn calculate_hash(path: &PathBuf, algorithm: &str, buffer_size: usize) -> std::io::Result<String> {
+pub fn calculate_hash(
+    path: &PathBuf,
+    algorithm: &str,
+    buffer_size: usize,
+) -> std::io::Result<String> {
     use std::fs::File;
     use std::io::Read;
-    
+
     let mut file = File::open(path)?;
     let mut buffer = vec![0; buffer_size];
-    
+
     match algorithm {
         "md5" => {
             let mut context = md5::Context::new();

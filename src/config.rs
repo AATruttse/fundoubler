@@ -96,94 +96,113 @@ pub struct CliOptions {
     /// Start path (default: current directory)
     #[arg(default_value = ".")]
     pub path_start: PathBuf,
-    
+
     /// Output file (default: stdout)
     pub output: Option<PathBuf>,
-    
+
     /// Check files by content (implies hashing)
     #[arg(short = 't', long)]
     pub content: bool,
-    
+
     /// Check files by name
     #[arg(short = 'n', long)]
     pub name: bool,
-    
+
     /// Check files by size
     #[arg(long)]
     pub size: bool,
-    
+
     /// Check files by creation date
     #[arg(long)]
     pub create_date: bool,
-    
+
     /// Check files by last modified date
     #[arg(long)]
     pub mod_date: bool,
-    
+
     /// Check files by MD5 hash
     #[arg(long)]
     pub md5: bool,
-    
+
     /// Check files by SHA512 hash
     #[arg(long)]
     pub sha512: bool,
-    
+
     /// Check files by XXH3 hash (fast)
     #[arg(long)]
     pub xxh3: bool,
-    
+
     /// Delete duplicates after confirmation
     #[arg(short = 'd', long)]
     pub delete: bool,
-    
+
     /// Force delete without confirmation (DANGEROUS!)
     #[arg(short = 'f', long)]
     pub force_delete: bool,
-    
+
     /// Dry run - don't actually delete
     #[arg(long)]
     pub dry_run: bool,
-    
+
     /// Minimum file size (bytes)
     #[arg(long)]
     pub min_size: Option<u64>,
-    
+
     /// Maximum file size (bytes)
     #[arg(long)]
     pub max_size: Option<u64>,
-    
+
     /// File name filter (regex)
     #[arg(long)]
     pub filter: Option<String>,
-    
+
+    /// Min creation time (YYYY-MM-DD or YYYY-MM-DD HH:MM:SS)
+    #[arg(long)]
+    pub min_create_time: Option<String>,
+    /// Max creation time (YYYY-MM-DD or YYYY-MM-DD HH:MM:SS)
+    #[arg(long)]
+    pub max_create_time: Option<String>,
+    /// Min modification time (YYYY-MM-DD or YYYY-MM-DD HH:MM:SS)
+    #[arg(long)]
+    pub min_mod_time: Option<String>,
+    /// Max modification time (YYYY-MM-DD or YYYY-MM-DD HH:MM:SS)
+    #[arg(long)]
+    pub max_mod_time: Option<String>,
+    /// Only include files owned by this user (name or uid; Unix only)
+    #[arg(long)]
+    pub user_filter: Option<String>,
+    /// Only include files in this group (name or gid; Unix only)
+    #[arg(long)]
+    pub group_filter: Option<String>,
+
     /// Directory to exclude from search (can be repeated)
     #[arg(long)]
     pub exclude_dir: Vec<PathBuf>,
-    
+
     /// Directory treated as source (files here are kept over duplicates elsewhere)
     #[arg(long)]
     pub source_dir: Vec<PathBuf>,
-    
+
     /// Hash read buffer size in bytes (default: 64KB)
     #[arg(long)]
     pub hash_buffer_size: Option<u64>,
-    
+
     /// Enable hash caching to avoid re-hashing on re-scan
     #[arg(long)]
     pub hash_cache: bool,
-    
+
     /// Directory for hash cache files
     #[arg(long)]
     pub hash_cache_dir: Option<PathBuf>,
-    
+
     /// Sort order (can be specified multiple times)
     #[arg(long, value_enum)]
     pub sort: Vec<SortOrder>,
-    
+
     /// Verbosity level (can be used multiple times)
     #[arg(short = 'v', long, action = clap::ArgAction::Count)]
     pub verbose: u8,
-    
+
     /// Silent mode (no output)
     #[arg(short = 's', long)]
     pub silent: bool,
@@ -191,19 +210,19 @@ pub struct CliOptions {
     /// Disable progress bar during scan
     #[arg(long)]
     pub no_progress_bar: bool,
-    
+
     /// Configuration file
     #[arg(long)]
     pub config: Option<PathBuf>,
-    
+
     /// Create a default config file and exit (default: fundoubler.toml)
     #[arg(long, value_name = "PATH", num_args = 0..=1, default_missing_value = "fundoubler.toml")]
     pub init_config: Option<PathBuf>,
-    
+
     /// Show only N groups of duplicates
     #[arg(long)]
     pub limit: Option<usize>,
-    
+
     /// Skip confirmation prompts; assume "yes" to all (for scripts, CI)
     #[arg(long)]
     pub skip_confirm: bool,
@@ -229,11 +248,18 @@ pub struct CliOptions {
 #[serde(default)]
 pub struct ConfigFile {
     // Core settings (custom de/serialize for TOML: paths are strings in file)
-    #[serde(default = "default_path_start", serialize_with = "path_buf_to_str", deserialize_with = "path_buf_from_str")]
+    #[serde(
+        default = "default_path_start",
+        serialize_with = "path_buf_to_str",
+        deserialize_with = "path_buf_from_str"
+    )]
     pub path_start: PathBuf,
-    #[serde(serialize_with = "opt_path_buf_to_str", deserialize_with = "opt_path_buf_from_str")]
+    #[serde(
+        serialize_with = "opt_path_buf_to_str",
+        deserialize_with = "opt_path_buf_from_str"
+    )]
     pub output: Option<PathBuf>,
-    
+
     // Comparison criteria
     pub compare_by_name: bool,
     pub compare_by_size: bool,
@@ -242,30 +268,48 @@ pub struct ConfigFile {
     pub compare_by_md5: bool,
     pub compare_by_sha512: bool,
     pub compare_by_xxh3: bool,
-    
+
     // Filters
     pub min_size: u64,
     pub max_size: u64,
     pub name_filter: Option<String>,
-    #[serde(default, serialize_with = "vec_path_to_str", deserialize_with = "vec_path_from_str")]
+    pub min_create_time: Option<String>,
+    pub max_create_time: Option<String>,
+    pub min_mod_time: Option<String>,
+    pub max_mod_time: Option<String>,
+    pub user_filter: Option<String>,
+    pub group_filter: Option<String>,
+    #[serde(
+        default,
+        serialize_with = "vec_path_to_str",
+        deserialize_with = "vec_path_from_str"
+    )]
     pub exclude_dirs: Vec<PathBuf>,
-    #[serde(default, serialize_with = "vec_path_to_str", deserialize_with = "vec_path_from_str")]
+    #[serde(
+        default,
+        serialize_with = "vec_path_to_str",
+        deserialize_with = "vec_path_from_str"
+    )]
     pub source_dirs: Vec<PathBuf>,
-    
+
     #[serde(default = "default_hash_buffer_size")]
     pub hash_buffer_size: u64,
-    
+
     pub hash_cache: bool,
-    #[serde(default = "default_hash_cache_dir", serialize_with = "path_buf_to_str", deserialize_with = "path_buf_from_str")]
+    #[serde(
+        default = "default_hash_cache_dir",
+        serialize_with = "path_buf_to_str",
+        deserialize_with = "path_buf_from_str"
+    )]
     pub hash_cache_dir: PathBuf,
-    
+
     // Output control
     pub sort_orders: Vec<SortOrder>,
     pub limit: Option<usize>,
     pub verbose: u8,
     pub silent: bool,
     pub no_progress_bar: bool,
-    
+
     // Deletion
     pub delete: bool,
     pub force_delete: bool,
@@ -275,7 +319,11 @@ pub struct ConfigFile {
     pub skip_confirm: bool,
 
     pub log_level: u8,
-    #[serde(default = "default_logs_dir", serialize_with = "path_buf_to_str", deserialize_with = "path_buf_from_str")]
+    #[serde(
+        default = "default_logs_dir",
+        serialize_with = "path_buf_to_str",
+        deserialize_with = "path_buf_from_str"
+    )]
     pub logs_dir: PathBuf,
 
     pub delete_log: bool,
@@ -296,6 +344,12 @@ impl Default for ConfigFile {
             min_size: 0,
             max_size: u64::MAX,
             name_filter: None,
+            min_create_time: None,
+            max_create_time: None,
+            min_mod_time: None,
+            max_mod_time: None,
+            user_filter: None,
+            group_filter: None,
             exclude_dirs: Vec::new(),
             source_dirs: Vec::new(),
             hash_buffer_size: DEFAULT_HASH_BUFFER_SIZE,
@@ -322,10 +376,18 @@ impl ConfigFile {
     pub fn from_cli(cli: &CliOptions) -> crate::error::Result<Self> {
         let mut config = if let Some(path) = &cli.config {
             let contents = fs::read_to_string(path).map_err(|e| {
-                crate::error::AppError::Config(format!("Failed to read config file '{}': {}", path.display(), e))
+                crate::error::AppError::Config(format!(
+                    "Failed to read config file '{}': {}",
+                    path.display(),
+                    e
+                ))
             })?;
             toml::from_str(&contents).map_err(|e| {
-                crate::error::AppError::Config(format!("Invalid config file '{}': {}", path.display(), e))
+                crate::error::AppError::Config(format!(
+                    "Invalid config file '{}': {}",
+                    path.display(),
+                    e
+                ))
             })?
         } else {
             Self::default()
@@ -339,8 +401,14 @@ impl ConfigFile {
 
         // If user passed any comparison flag, use ONLY those (don't add to defaults).
         // This makes e.g. `--size` fast (no hashing) instead of adding to size+xxh3.
-        let cli_specified_comparison = cli.name || cli.size || cli.create_date || cli.mod_date
-            || cli.content || cli.md5 || cli.sha512 || cli.xxh3;
+        let cli_specified_comparison = cli.name
+            || cli.size
+            || cli.create_date
+            || cli.mod_date
+            || cli.content
+            || cli.md5
+            || cli.sha512
+            || cli.xxh3;
 
         if cli_specified_comparison {
             config.compare_by_name = cli.name;
@@ -392,6 +460,24 @@ impl ConfigFile {
         if let Some(filter) = &cli.filter {
             config.name_filter = Some(filter.clone());
         }
+        if cli.min_create_time.is_some() {
+            config.min_create_time = cli.min_create_time.clone();
+        }
+        if cli.max_create_time.is_some() {
+            config.max_create_time = cli.max_create_time.clone();
+        }
+        if cli.min_mod_time.is_some() {
+            config.min_mod_time = cli.min_mod_time.clone();
+        }
+        if cli.max_mod_time.is_some() {
+            config.max_mod_time = cli.max_mod_time.clone();
+        }
+        if cli.user_filter.is_some() {
+            config.user_filter = cli.user_filter.clone();
+        }
+        if cli.group_filter.is_some() {
+            config.group_filter = cli.group_filter.clone();
+        }
         if !cli.exclude_dir.is_empty() {
             config.exclude_dirs = cli.exclude_dir.clone();
         }
@@ -429,7 +515,7 @@ impl ConfigFile {
 
         Ok(config)
     }
-    
+
     pub fn validate(&self) -> crate::error::Result<()> {
         if !self.compare_by_name
             && !self.compare_by_size
@@ -443,7 +529,23 @@ impl ConfigFile {
                 "At least one comparison criteria must be enabled".to_string(),
             ));
         }
-        
+
+        for (name, val) in [
+            ("min_create_time", &self.min_create_time),
+            ("max_create_time", &self.max_create_time),
+            ("min_mod_time", &self.min_mod_time),
+            ("max_mod_time", &self.max_mod_time),
+        ] {
+            if let Some(s) = val {
+                if crate::filters::parse_datetime(s).is_none() {
+                    return Err(crate::error::AppError::InvalidDate(format!(
+                        "Invalid {} '{}'. Use YYYY-MM-DD or YYYY-MM-DD HH:MM:SS",
+                        name, s
+                    )));
+                }
+            }
+        }
+
         Ok(())
     }
 }

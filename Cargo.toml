@@ -27,6 +27,9 @@ toml = "0.8"
 walkdir = "2.5"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }  # Faster hashing
 
+[target.'cfg(unix)'.dependencies]
+users = "0.11"
+
 [dev-dependencies]
 assert_fs = "1.0"
 tempfile = "3.6"

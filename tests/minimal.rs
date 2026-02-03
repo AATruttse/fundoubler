@@ -7,7 +7,7 @@ fn test_program_starts() {
         .arg("--help")
         .output()
         .expect("Failed to execute process");
-    
+
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     // Basic smoke test: help output should mention the program name and be non-empty
@@ -21,18 +21,18 @@ fn test_program_starts() {
 #[test]
 fn test_duplicate_detection_simple() {
     let temp_dir = TempDir::new().unwrap();
-    
+
     // Create two identical files
     let content = "identical content";
     fs::write(temp_dir.path().join("file1.txt"), content).unwrap();
     fs::write(temp_dir.path().join("file2.txt"), content).unwrap();
-    
+
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_fundoubler"))
         .arg(temp_dir.path())
         .arg("--md5")
         .output()
         .expect("Failed to execute process");
-    
+
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 

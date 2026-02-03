@@ -27,7 +27,9 @@ fn find_log_file(logs_dir: &Path) -> Option<std::path::PathBuf> {
     for e in entries.flatten() {
         let p = e.path();
         if p.extension().map_or(false, |e| e == "log")
-            && p.file_stem().and_then(|s| s.to_str()).map_or(false, |s| s.ends_with("fun"))
+            && p.file_stem()
+                .and_then(|s| s.to_str())
+                .map_or(false, |s| s.ends_with("fun"))
         {
             return Some(p);
         }
@@ -48,7 +50,10 @@ fn log_unit_init_level_0_creates_no_file() {
     log::log_info("should not appear");
     assert!(log::current_log_path().is_none());
     let entries: Vec<_> = fs::read_dir(temp.path()).unwrap().collect();
-    assert!(entries.is_empty(), "No log file should be created when level is 0");
+    assert!(
+        entries.is_empty(),
+        "No log file should be created when level is 0"
+    );
 }
 
 #[test]
@@ -59,8 +64,18 @@ fn log_unit_init_level_1_creates_file() {
     assert!(log::current_log_path().is_some());
     let path = log::current_log_path().unwrap();
     assert!(path.exists());
-    assert!(path.file_name().unwrap().to_str().unwrap().ends_with("fun.log"));
-    assert!(path.file_name().unwrap().to_str().unwrap().starts_with("20")); // YYYY
+    assert!(path
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .ends_with("fun.log"));
+    assert!(path
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .starts_with("20")); // YYYY
 }
 
 #[test]
@@ -146,8 +161,14 @@ fn log_unit_reinit_replaces_state() {
     log::log_error("second err");
     let path = find_log_file(temp.path()).expect("log file should exist");
     let content = read_log_content(&path);
-    assert!(content.contains("second err"), "reinit to level 1 should still log errors");
-    assert!(!content.contains("second info"), "reinit to level 1 should not log info");
+    assert!(
+        content.contains("second err"),
+        "reinit to level 1 should still log errors"
+    );
+    assert!(
+        !content.contains("second info"),
+        "reinit to level 1 should not log info"
+    );
 }
 
 #[test]
@@ -199,7 +220,10 @@ fn config_cli_logs_dir_parsing() {
 
     let args = ["fundoubler", "--logs-dir", "/var/log/fundoubler"];
     let cli = CliOptions::parse_from(args);
-    assert_eq!(cli.logs_dir.as_deref(), Some(std::path::Path::new("/var/log/fundoubler")));
+    assert_eq!(
+        cli.logs_dir.as_deref(),
+        Some(std::path::Path::new("/var/log/fundoubler"))
+    );
 
     let args = ["fundoubler"];
     let cli = CliOptions::parse_from(args);
@@ -210,7 +234,13 @@ fn config_cli_logs_dir_parsing() {
 fn config_from_cli_log_options() {
     use clap::Parser;
 
-    let args = ["fundoubler", "-ll", "--logs-dir", "/tmp/mylogs", "/scan/path"];
+    let args = [
+        "fundoubler",
+        "-ll",
+        "--logs-dir",
+        "/tmp/mylogs",
+        "/scan/path",
+    ];
     let cli = CliOptions::parse_from(args);
     let config = ConfigFile::from_cli(&cli).unwrap();
     assert_eq!(config.log_level, 2);
@@ -244,7 +274,10 @@ logs_dir = "{}"
     let cli = CliOptions::parse_from(args);
     let config = ConfigFile::from_cli(&cli).unwrap();
     assert_eq!(config.log_level, 3);
-    assert!(config.logs_dir.ends_with("custom_logs") || config.logs_dir.to_string_lossy().contains("custom_logs"));
+    assert!(
+        config.logs_dir.ends_with("custom_logs")
+            || config.logs_dir.to_string_lossy().contains("custom_logs")
+    );
 }
 
 // =============================================================================
@@ -295,7 +328,11 @@ fn integration_log_level_2_info_messages() {
     let log_file = find_log_file(&logs_dir).expect("log file should exist");
     let content = read_log_content(&log_file);
     assert!(content.contains("INFO"));
-    assert!(content.contains("Logging initialized") || content.contains("scan") || content.contains("complete"));
+    assert!(
+        content.contains("Logging initialized")
+            || content.contains("scan")
+            || content.contains("complete")
+    );
 }
 
 #[test]
@@ -315,7 +352,9 @@ fn integration_log_level_3_debug_messages() {
 
     let log_file = find_log_file(&logs_dir).expect("log file should exist");
     let content = read_log_content(&log_file);
-    assert!(content.contains("DEBUG") || content.contains("Scanning") || content.contains("Collected"));
+    assert!(
+        content.contains("DEBUG") || content.contains("Scanning") || content.contains("Collected")
+    );
 }
 
 #[test]
@@ -338,7 +377,9 @@ fn integration_error_logged_on_config_failure() {
     let log_file = find_log_file(&logs_dir).expect("log file should exist");
     let content = read_log_content(&log_file);
     assert!(content.contains("ERROR"));
-    assert!(content.contains("Config") || content.contains("config") || content.contains("Invalid"));
+    assert!(
+        content.contains("Config") || content.contains("config") || content.contains("Invalid")
+    );
 }
 
 #[test]
@@ -350,17 +391,17 @@ fn integration_default_logs_dir() {
 
     // Run in temp dir so default ./logs is temp/logs
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_fundoubler"));
-    cmd.current_dir(temp.path())
-        .arg(".")
-        .arg("--md5")
-        .arg("-l");
+    cmd.current_dir(temp.path()).arg(".").arg("--md5").arg("-l");
     let output = cmd.output().unwrap();
     assert!(output.status.success());
 
     let logs_dir = temp.path().join("logs");
     assert!(logs_dir.exists(), "default ./logs should be created");
     let log_file = find_log_file(&logs_dir);
-    assert!(log_file.is_some(), "log file should exist in default logs dir");
+    assert!(
+        log_file.is_some(),
+        "log file should exist in default logs dir"
+    );
 }
 
 #[test]

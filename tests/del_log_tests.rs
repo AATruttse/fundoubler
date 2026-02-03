@@ -25,9 +25,15 @@ fn run_fundoubler(args: &[&str]) -> (String, String, std::process::ExitStatus) {
     (stdout, stderr, output.status)
 }
 
-fn run_fundoubler_with_stdin(args: &[&str], stdin_input: &str) -> (String, String, std::process::ExitStatus) {
+fn run_fundoubler_with_stdin(
+    args: &[&str],
+    stdin_input: &str,
+) -> (String, String, std::process::ExitStatus) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_fundoubler"));
-    cmd.args(args).stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
+    cmd.args(args)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
     let mut child = cmd.spawn().expect("Failed to spawn");
     {
         let mut stdin = child.stdin.take().unwrap();
@@ -66,7 +72,12 @@ fn del_log_unit_create_del_log_creates_directory_and_file() {
     assert!(path.parent().unwrap().exists());
     assert!(path.parent().unwrap().file_name().unwrap() == "del_logs");
 
-    del_log::write_record(&mut file, Path::new("/a/deleted.txt"), Path::new("/a/kept.txt")).unwrap();
+    del_log::write_record(
+        &mut file,
+        Path::new("/a/deleted.txt"),
+        Path::new("/a/kept.txt"),
+    )
+    .unwrap();
     drop(file);
 
     let content = fs::read_to_string(&path).unwrap();
@@ -92,7 +103,12 @@ fn del_log_unit_write_record_format() {
     let logs_dir = temp.path().join("logs");
     let (path, mut file) = del_log::create_del_log(&logs_dir).unwrap();
 
-    del_log::write_record(&mut file, Path::new("C:\\del\\a.txt"), Path::new("C:\\keep\\a.txt")).unwrap();
+    del_log::write_record(
+        &mut file,
+        Path::new("C:\\del\\a.txt"),
+        Path::new("C:\\keep\\a.txt"),
+    )
+    .unwrap();
     del_log::write_record(&mut file, Path::new("/tmp/b.txt"), Path::new("/tmp/c.txt")).unwrap();
     drop(file);
 
@@ -151,11 +167,7 @@ fn del_log_unit_parse_del_log_multiple_records() {
 fn del_log_unit_parse_del_log_skips_empty_lines() {
     let temp = TempDir::new().unwrap();
     let path = temp.path().join("blank.log");
-    fs::write(
-        &path,
-        "\ndeleted:/a.txt\n\nsource:/b.txt\n\n",
-    )
-    .unwrap();
+    fs::write(&path, "\ndeleted:/a.txt\n\nsource:/b.txt\n\n").unwrap();
 
     let records = del_log::parse_del_log(&path).unwrap();
     assert_eq!(records.len(), 1);
@@ -167,11 +179,7 @@ fn del_log_unit_parse_del_log_skips_empty_lines() {
 fn del_log_unit_parse_del_log_orphan_source_ignored() {
     let temp = TempDir::new().unwrap();
     let path = temp.path().join("orphan.log");
-    fs::write(
-        &path,
-        "source:/orphan.txt\ndeleted:/a.txt\nsource:/b.txt\n",
-    )
-    .unwrap();
+    fs::write(&path, "source:/orphan.txt\ndeleted:/a.txt\nsource:/b.txt\n").unwrap();
 
     let records = del_log::parse_del_log(&path).unwrap();
     assert_eq!(records.len(), 1);
@@ -183,11 +191,7 @@ fn del_log_unit_parse_del_log_orphan_source_ignored() {
 fn del_log_unit_parse_del_log_double_deleted_second_pair_used() {
     let temp = TempDir::new().unwrap();
     let path = temp.path().join("double.log");
-    fs::write(
-        &path,
-        "deleted:/a.txt\ndeleted:/b.txt\nsource:/c.txt\n",
-    )
-    .unwrap();
+    fs::write(&path, "deleted:/a.txt\ndeleted:/b.txt\nsource:/c.txt\n").unwrap();
 
     let records = del_log::parse_del_log(&path).unwrap();
     assert_eq!(records.len(), 1);
@@ -199,11 +203,7 @@ fn del_log_unit_parse_del_log_double_deleted_second_pair_used() {
 fn del_log_unit_parse_del_log_trims_whitespace() {
     let temp = TempDir::new().unwrap();
     let path = temp.path().join("trim.log");
-    fs::write(
-        &path,
-        "deleted:  /a.txt  \nsource:  /b.txt  \n",
-    )
-    .unwrap();
+    fs::write(&path, "deleted:  /a.txt  \nsource:  /b.txt  \n").unwrap();
 
     let records = del_log::parse_del_log(&path).unwrap();
     assert_eq!(records.len(), 1);
@@ -314,11 +314,7 @@ fn config_cli_no_delete_log_sets_false() {
 
 #[test]
 fn config_cli_default_delete_log_true() {
-    let config = ConfigFile::from_cli(&CliOptions::parse_from([
-        "fundoubler",
-        ".",
-    ]))
-    .unwrap();
+    let config = ConfigFile::from_cli(&CliOptions::parse_from(["fundoubler", "."])).unwrap();
     assert!(config.delete_log);
 }
 
@@ -434,7 +430,10 @@ fn integration_no_delete_log_disables_logging() {
 
     assert!(status.success(), "stderr: {}", stderr);
     let del_logs = logs_dir.join("del_logs");
-    assert!(!del_logs.exists(), "del_logs should not be created when --no-delete-log");
+    assert!(
+        !del_logs.exists(),
+        "del_logs should not be created when --no-delete-log"
+    );
 }
 
 #[test]
@@ -559,13 +558,13 @@ fn integration_restore_from_specific_log() {
         .unwrap()
         .path();
 
-    let (stdout, stderr, status2) = run_fundoubler(&[
-        "--restore",
-        log_file.to_str().unwrap(),
-        "--skip-confirm",
-    ]);
+    let (stdout, stderr, status2) =
+        run_fundoubler(&["--restore", log_file.to_str().unwrap(), "--skip-confirm"]);
     assert!(status2.success(), "restore failed: {}", stderr);
-    assert!(deleted_path.exists(), "restore should recreate z_deleted.txt");
+    assert!(
+        deleted_path.exists(),
+        "restore should recreate z_deleted.txt"
+    );
     assert!(stdout.contains("Restored"));
 
     let restored_content = fs::read_to_string(&deleted_path).unwrap();
@@ -618,15 +617,12 @@ fn integration_restore_empty_log() {
 #[test]
 fn config_cli_restore_parsing() {
     use clap::Parser;
-    
+
     let cli = CliOptions::parse_from(["fundoubler", "--restore"]);
     assert!(cli.restore.is_some());
-    
-    let cli_with_path = CliOptions::parse_from([
-        "fundoubler",
-        "--restore",
-        "/path/to/log/fundel.log",
-    ]);
+
+    let cli_with_path =
+        CliOptions::parse_from(["fundoubler", "--restore", "/path/to/log/fundel.log"]);
     assert!(cli_with_path.restore.is_some());
     assert_eq!(
         cli_with_path.restore.as_ref().unwrap().to_string_lossy(),
@@ -639,8 +635,11 @@ fn integration_restore_nonexistent_log_fails() {
     let temp_dir = TempDir::new().unwrap();
     let nonexistent = temp_dir.path().join("nonexistent_fundel.log");
 
-    let (_stdout, stderr, status) = run_fundoubler(&["--restore", nonexistent.to_str().unwrap()]);
-    assert!(!status.success(), "restore with nonexistent log should fail");
+    let (_stdout, _stderr, status) = run_fundoubler(&["--restore", nonexistent.to_str().unwrap()]);
+    assert!(
+        !status.success(),
+        "restore with nonexistent log should fail"
+    );
 }
 
 #[test]
@@ -649,11 +648,8 @@ fn integration_restore_no_log_found_fails() {
     let logs_dir = temp_dir.path().join("empty_logs");
     fs::create_dir_all(&logs_dir).unwrap();
 
-    let (_stdout, stderr, status) = run_fundoubler(&[
-        "--restore",
-        "--logs-dir",
-        logs_dir.to_str().unwrap(),
-    ]);
+    let (_stdout, stderr, status) =
+        run_fundoubler(&["--restore", "--logs-dir", logs_dir.to_str().unwrap()]);
     assert!(!status.success());
     assert!(stderr.contains("No delete log") || stderr.contains("not found"));
 }
@@ -675,14 +671,13 @@ fn integration_restore_when_source_missing_reports_error() {
     )
     .unwrap();
 
-    let (stdout, stderr, status) = run_fundoubler(&[
-        "--restore",
-        log_path.to_str().unwrap(),
-        "--skip-confirm",
-    ]);
+    let (stdout, stderr, status) =
+        run_fundoubler(&["--restore", log_path.to_str().unwrap(), "--skip-confirm"]);
     assert!(status.success()); // restore still exits 0 but reports errors per record
     assert!(
-        stderr.contains("no longer exists") || stderr.contains("Source") || stdout.contains("error"),
+        stderr.contains("no longer exists")
+            || stderr.contains("Source")
+            || stdout.contains("error"),
         "expected error about missing source, got stdout: {} stderr: {}",
         stdout,
         stderr
@@ -708,11 +703,8 @@ fn integration_restore_skips_when_deleted_already_exists() {
     )
     .unwrap();
 
-    let (stdout, stderr, status) = run_fundoubler(&[
-        "--restore",
-        log_path.to_str().unwrap(),
-        "--skip-confirm",
-    ]);
+    let (stdout, stderr, status) =
+        run_fundoubler(&["--restore", log_path.to_str().unwrap(), "--skip-confirm"]);
     assert!(status.success());
     assert!(
         stderr.contains("already exists") || stdout.contains("Skipping"),
@@ -742,9 +734,15 @@ fn integration_restore_asks_confirmation_without_skip_confirm() {
     .unwrap();
 
     // Pipe "n" to decline - file should not be restored
-    let (stdout, stderr, _status) = run_fundoubler_with_stdin(&["--restore", log_path.to_str().unwrap()], "n\n");
+    let (stdout, stderr, _status) =
+        run_fundoubler_with_stdin(&["--restore", log_path.to_str().unwrap()], "n\n");
     // Status may be non-zero if dialoguer fails on non-TTY; main assertion is file not restored
-    assert!(!deleted_path.exists(), "file should not be restored when user declines, stdout: {} stderr: {}", stdout, stderr);
+    assert!(
+        !deleted_path.exists(),
+        "file should not be restored when user declines, stdout: {} stderr: {}",
+        stdout,
+        stderr
+    );
 }
 
 #[test]

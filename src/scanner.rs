@@ -7,9 +7,10 @@ use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use walkdir::WalkDir;
 
-use crate::check::{CheckOptions, calculate_hash};
+use crate::check::{calculate_hash, CheckOptions};
 use crate::config::ConfigFile;
 use crate::error::Result;
+use crate::filters;
 use crate::hash_cache::HashCache;
 
 pub struct FileScanner {
@@ -33,26 +34,29 @@ impl FileScanner {
         } else {
             None
         };
-        
+
         let cache = if config.hash_cache {
             Some(Arc::new(HashCache::load(&config.hash_cache_dir)))
         } else {
             None
         };
-        
+
         Self {
             config: Arc::new(config.clone()),
             progress_bar,
             cache,
         }
     }
-    
+
     pub fn scan(&self) -> Result<Vec<FileGroup>> {
         let config = self.config.clone();
         let exclude_dirs = config.exclude_dirs.clone();
         let path_start = config.path_start.clone();
-        
-        crate::log::log_debug(&format!("Scanning directory: {}", config.path_start.display()));
+
+        crate::log::log_debug(&format!(
+            "Scanning directory: {}",
+            config.path_start.display()
+        ));
 
         // Collect all files first (this is IO bound)
         let entries: Vec<_> = WalkDir::new(&config.path_start)
@@ -67,7 +71,7 @@ impl FileScanner {
             .filter_map(|e| e.ok())
             .filter(|e| !e.file_type().is_dir())
             .collect();
-        
+
         crate::log::log_debug(&format!("Collected {} files to process", entries.len()));
 
         if let Some(pb) = &self.progress_bar {
@@ -75,7 +79,7 @@ impl FileScanner {
             pb.set_length(len);
             pb.set_message("Scanning files...");
         }
-        
+
         // Process files in parallel (Ok(Some) = include, Ok(None) = filtered, Err = real error)
         let results: Vec<_> = entries
             .par_iter()
@@ -86,7 +90,7 @@ impl FileScanner {
                 self.process_file(entry)
             })
             .collect();
-        
+
         let file_infos: Vec<_> = match results.into_iter().collect::<Result<Vec<_>>>() {
             Ok(v) => v,
             Err(e) => {
@@ -97,12 +101,12 @@ impl FileScanner {
         .into_iter()
         .filter_map(|x| x)
         .collect();
-        
+
         if let Some(pb) = &self.progress_bar {
             pb.disable_steady_tick();
             pb.finish_with_message("Scanning complete");
         }
-        
+
         if let Some(cache) = &self.cache {
             if let Err(e) = cache.save() {
                 crate::log::log_error(&format!("Hash cache save failed: {}", e));
@@ -110,9 +114,12 @@ impl FileScanner {
                 crate::log::log_debug("Hash cache saved");
             }
         }
-        
+
         // Group duplicates
-        crate::log::log_debug(&format!("Grouped {} files into unique keys, filtering duplicates", file_infos.len()));
+        crate::log::log_debug(&format!(
+            "Grouped {} files into unique keys, filtering duplicates",
+            file_infos.len()
+        ));
         let mut groups: HashMap<CheckOptions, Vec<PathBuf>> = HashMap::new();
 
         for (key, path) in file_infos {
@@ -130,20 +137,20 @@ impl FileScanner {
                 FileGroup { key, paths }
             })
             .collect();
-        
+
         // Sort groups
         if !config.sort_orders.is_empty() {
             result.sort_by(|a, b| crate::check::compare(&config, &a.key, &b.key));
         }
-        
+
         // Apply limit
         if let Some(limit) = config.limit {
             result.truncate(limit);
         }
-        
+
         Ok(result)
     }
-    
+
     /// Returns Ok(Some(...)) to include, Ok(None) if filtered out, Err for real errors.
     fn process_file(&self, entry: &walkdir::DirEntry) -> Result<Option<(CheckOptions, PathBuf)>> {
         let path = entry.path().to_path_buf();
@@ -153,45 +160,76 @@ impl FileScanner {
         }
 
         let metadata = entry.metadata()?;
-        
+
         // Apply filters (return None = excluded by design, not an error)
-        if metadata.len() < self.config.min_size 
-            || metadata.len() > self.config.max_size 
-        {
+        if metadata.len() < self.config.min_size || metadata.len() > self.config.max_size {
             return Ok(None);
         }
-        
+
         if let Some(filter) = &self.config.name_filter {
             let re = regex::Regex::new(filter)?;
             if !re.is_match(&path.to_string_lossy()) {
                 return Ok(None);
             }
         }
-        
+
+        // Time filters (Windows and Linux)
+        let min_ct = self.config.min_create_time.as_ref().and_then(|s| filters::parse_datetime(s));
+        let max_ct = self.config.max_create_time.as_ref().and_then(|s| filters::parse_datetime(s));
+        let created = metadata.created().ok();
+        if !filters::time_in_range(created, min_ct.as_ref(), max_ct.as_ref()) {
+            return Ok(None);
+        }
+        let min_mt = self.config.min_mod_time.as_ref().and_then(|s| filters::parse_datetime(s));
+        let max_mt = self.config.max_mod_time.as_ref().and_then(|s| filters::parse_datetime(s));
+        let modified = metadata.modified().ok();
+        if !filters::time_in_range(modified, min_mt.as_ref(), max_mt.as_ref()) {
+            return Ok(None);
+        }
+
+        // User/group filters (Unix: filter; Windows: no-op)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            let uid = metadata.uid();
+            let gid = metadata.gid();
+            if !filters::matches_user_filter(&path, uid, self.config.user_filter.as_deref()) {
+                return Ok(None);
+            }
+            if !filters::matches_group_filter(&path, gid, self.config.group_filter.as_deref()) {
+                return Ok(None);
+            }
+        }
+
         // Build key based on enabled comparison criteria
         let mut key = CheckOptions::new();
-        
+
         if self.config.compare_by_name {
             key.name = Some(entry.file_name().to_string_lossy().to_string());
         }
-        
+
         if self.config.compare_by_size {
             key.size = Some(metadata.len());
         }
-        
+
         if self.config.compare_by_created {
             key.created = metadata.created().ok();
         }
-        
+
         if self.config.compare_by_modified {
             key.modified = metadata.modified().ok();
         }
-        
+
         // Calculate hashes if needed (use cache when enabled)
-        let buf_size = self.config.hash_buffer_size.try_into().unwrap_or(usize::MAX).max(256);
+        let buf_size = self
+            .config
+            .hash_buffer_size
+            .try_into()
+            .unwrap_or(usize::MAX)
+            .max(256);
         let mtime = metadata.modified().ok();
         let size = metadata.len();
-        
+
         key.md5 = if self.config.compare_by_md5 {
             Some(self.get_or_compute_hash(&path, size, mtime, "md5", buf_size)?)
         } else {
@@ -207,10 +245,10 @@ impl FileScanner {
         } else {
             None
         };
-        
+
         Ok(Some((key, path)))
     }
-    
+
     fn get_or_compute_hash(
         &self,
         path: &PathBuf,

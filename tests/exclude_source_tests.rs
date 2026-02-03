@@ -99,7 +99,10 @@ fn exclude_unit_multiple_exclude_dirs() {
 
     let scanner = FileScanner::new(&config, false);
     let groups = scanner.scan().unwrap();
-    assert!(groups.is_empty(), "Only one file (a.txt) remains, no duplicates");
+    assert!(
+        groups.is_empty(),
+        "Only one file (a.txt) remains, no duplicates"
+    );
 }
 
 #[test]
@@ -250,8 +253,8 @@ fn source_unit_multiple_source_dirs() {
     assert_eq!(groups.len(), 1);
     assert_eq!(groups[0].paths.len(), 3);
     // First should be in src1 or src2 (both are source)
-    let first_in_source = norm(&groups[0].paths[0]).contains("src1")
-        || norm(&groups[0].paths[0]).contains("src2");
+    let first_in_source =
+        norm(&groups[0].paths[0]).contains("src1") || norm(&groups[0].paths[0]).contains("src2");
     assert!(first_in_source, "First path should be from a source dir");
 }
 
@@ -464,7 +467,9 @@ fn source_integration_display_order_source_first() {
     // First file in "Files:" section should be from source (first.txt)
     let file_section = stdout.find("Files:").and_then(|i| stdout.get(i..));
     assert!(
-        file_section.map(|s| s.contains("first.txt")).unwrap_or(false),
+        file_section
+            .map(|s| s.contains("first.txt"))
+            .unwrap_or(false),
         "Output should list first.txt (from source)"
     );
     // first.txt should appear before second.txt in the output
@@ -488,7 +493,12 @@ fn source_integration_config_file() {
     other.child("del.txt").write_str("dup").unwrap();
 
     let config_path = temp.path().join("config.toml");
-    let source_str = temp.path().join("primary").to_str().unwrap().replace('\\', "/");
+    let source_str = temp
+        .path()
+        .join("primary")
+        .to_str()
+        .unwrap()
+        .replace('\\', "/");
     fs::write(
         &config_path,
         format!(
@@ -547,7 +557,10 @@ fn combined_exclude_and_source() {
     assert!(status.success(), "stderr: {}", stderr);
     assert!(source.child("keep.txt").path().exists());
     assert!(!other.child("del.txt").path().exists());
-    assert!(excluded.child("also_dup.txt").path().exists(), "Excluded file untouched");
+    assert!(
+        excluded.child("also_dup.txt").path().exists(),
+        "Excluded file untouched"
+    );
 }
 
 #[test]
@@ -571,7 +584,10 @@ fn source_integration_dry_run_shows_correct_order() {
     assert!(status.success(), "stderr: {}", stderr);
     assert!(stdout.contains("DRY RUN"));
     assert!(source.child("keep.txt").path().exists());
-    assert!(other.child("del.txt").path().exists(), "Dry run must not delete");
+    assert!(
+        other.child("del.txt").path().exists(),
+        "Dry run must not delete"
+    );
 }
 
 #[test]

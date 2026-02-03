@@ -5,29 +5,26 @@ use std::process::Command;
 fn run_fundoubler(args: &[&str]) -> (String, String, std::process::ExitStatus) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_fundoubler"));
     cmd.args(args);
-    
+
     let output = cmd.output().expect("Failed to execute process");
-    
+
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-    
+
     (stdout, stderr, output.status)
 }
 
 #[test]
 fn test_basic_duplicate_detection() {
     let temp_dir = TempDir::new().unwrap();
-    
+
     // Create duplicates
     fs::write(temp_dir.path().join("file1.txt"), "same content").unwrap();
     fs::write(temp_dir.path().join("file2.txt"), "same content").unwrap();
     fs::write(temp_dir.path().join("unique.txt"), "different content").unwrap();
-    
-    let (stdout, stderr, status) = run_fundoubler(&[
-        temp_dir.path().to_str().unwrap(),
-        "--md5",
-    ]);
-    
+
+    let (stdout, stderr, status) = run_fundoubler(&[temp_dir.path().to_str().unwrap(), "--md5"]);
+
     // Program should complete successfully
     assert!(
         status.success(),
@@ -51,17 +48,17 @@ fn test_basic_duplicate_detection() {
 #[test]
 fn test_dry_run_mode() {
     let temp_dir = TempDir::new().unwrap();
-    
+
     fs::write(temp_dir.path().join("a.txt"), "content").unwrap();
     fs::write(temp_dir.path().join("b.txt"), "content").unwrap();
-    
+
     let (stdout, stderr, status) = run_fundoubler(&[
         temp_dir.path().to_str().unwrap(),
         "--md5",
         "--delete",
         "--dry-run",
     ]);
-    
+
     // Program should complete successfully
     assert!(
         status.success(),
@@ -90,17 +87,15 @@ fn test_dry_run_mode() {
 #[test]
 fn test_size_comparison() {
     let temp_dir = TempDir::new().unwrap();
-    
+
     // Create files of same size and content (so they are duplicates
     // with default criteria: size + xxh3)
     fs::write(temp_dir.path().join("size1.txt"), "12345").unwrap(); // 5 bytes
     fs::write(temp_dir.path().join("size2.txt"), "12345").unwrap(); // 5 bytes (duplicate)
     fs::write(temp_dir.path().join("diff.txt"), "1").unwrap(); // 1 byte
-    
-    let (stdout, stderr, status) = run_fundoubler(&[
-        temp_dir.path().to_str().unwrap(),
-    ]);
-    
+
+    let (stdout, stderr, status) = run_fundoubler(&[temp_dir.path().to_str().unwrap()]);
+
     // Program should complete successfully
     assert!(
         status.success(),
