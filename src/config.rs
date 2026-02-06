@@ -242,6 +242,22 @@ pub struct CliOptions {
     /// Restore deleted files from delete log (use latest log if no path given)
     #[arg(long, value_name = "LOG_FILE", num_args = 0..=1, default_missing_value = "_latest_")]
     pub restore: Option<PathBuf>,
+
+    /// Create symlinks instead of deleting files (requires --delete)
+    #[arg(long)]
+    pub create_symlinks: bool,
+
+    /// Create hardlinks instead of deleting files (requires --delete)
+    #[arg(long)]
+    pub create_hardlinks: bool,
+
+    /// Create Windows shortcuts instead of deleting files (Windows only, requires --delete)
+    #[arg(long)]
+    pub create_shortcuts: bool,
+
+    /// Use kept file's name for links instead of deleted file's name (requires link option)
+    #[arg(long)]
+    pub no_keep_link_names: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -327,6 +343,12 @@ pub struct ConfigFile {
     pub logs_dir: PathBuf,
 
     pub delete_log: bool,
+
+    // Link creation (requires delete)
+    pub create_symlinks: bool,
+    pub create_hardlinks: bool,
+    pub create_shortcuts: bool,
+    pub no_keep_link_names: bool,
 }
 
 impl Default for ConfigFile {
@@ -367,6 +389,10 @@ impl Default for ConfigFile {
             log_level: 0,
             logs_dir: default_logs_dir(),
             delete_log: true,
+            create_symlinks: false,
+            create_hardlinks: false,
+            create_shortcuts: false,
+            no_keep_link_names: false,
         }
     }
 }
@@ -449,6 +475,18 @@ impl ConfigFile {
         config.verbose = if config.silent { 0 } else { cli.verbose };
         if cli.no_progress_bar {
             config.no_progress_bar = true;
+        }
+        if cli.create_symlinks {
+            config.create_symlinks = true;
+        }
+        if cli.create_hardlinks {
+            config.create_hardlinks = true;
+        }
+        if cli.create_shortcuts {
+            config.create_shortcuts = true;
+        }
+        if cli.no_keep_link_names {
+            config.no_keep_link_names = true;
         }
 
         if let Some(min) = cli.min_size {
@@ -544,6 +582,24 @@ impl ConfigFile {
                     )));
                 }
             }
+        }
+
+        // Validate link options require --delete
+        if (self.create_symlinks || self.create_hardlinks || self.create_shortcuts) && !self.delete {
+            return Err(crate::error::AppError::Config(
+                "Link creation options (--create-symlinks, --create-hardlinks, --create-shortcuts) require --delete".to_string(),
+            ));
+        }
+
+        // Validate only one link type at a time
+        let link_count = [self.create_symlinks, self.create_hardlinks, self.create_shortcuts]
+            .iter()
+            .filter(|&&x| x)
+            .count();
+        if link_count > 1 {
+            return Err(crate::error::AppError::Config(
+                "Only one link type can be specified at a time (--create-symlinks, --create-hardlinks, or --create-shortcuts)".to_string(),
+            ));
         }
 
         Ok(())

@@ -9,6 +9,7 @@ A fast, cross-platform utility for finding and removing file duplicates written 
 - **Smart filtering**: Filter by size, name patterns (regex), time ranges (creation/modification), user and group (Unix), exclude directories
 - **Source directories**: Prefer files in specified dirs when choosing which duplicate to keep
 - **Safe deletion**: Interactive per-file confirmation, dry-run mode, or unattended with `--skip-confirm`
+- **Link creation**: Replace duplicates with symlinks, hardlinks, or Windows shortcuts instead of deleting
 - **Delete log and restore**: Records deletions for undo; restore files from logs with `--restore`
 - **Hash cache**: Avoid re-hashing on re-scans (optional)
 - **Logging**: Configurable log levels to file
@@ -62,11 +63,13 @@ Default behavior compares by **size** and **XXH3** hash. Via CLI or config file:
 - **By size**: `fundoubler --size`
 - **By creation date**: `fundoubler --create-date`
 - **By last modified date**: `fundoubler --mod-date`
-- **By content (all hashes)**: `fundoubler --content` or `-t`
+- **By content (all hashes)**: `fundoubler --content` or `-t` — enables MD5, SHA512, and XXH3
 - **By MD5**: `fundoubler --md5`
 - **By SHA512**: `fundoubler --sha512`
 - **By XXH3 (fast)**: `fundoubler --xxh3`
 - **Combine** (e.g. size AND name, or mod-date AND MD5): `fundoubler --size --name` or `fundoubler --mod-date --md5`
+
+**Note:** When `--content` is combined with other comparison flags, it adds all three hash algorithms to the specified criteria. For example, `--content --size` compares by size AND all three hashes.
 
 ### Filtering options
 
@@ -96,6 +99,31 @@ Default behavior compares by **size** and **XXH3** hash. Via CLI or config file:
 - **Skip confirmation prompts** (scripts, CI): `fundoubler --skip-confirm` — assumes "yes" to all prompts
 - **Delete log** (default: on): Records each deleted file and its kept duplicate for restore. Use `--no-delete-log` to disable.
 - **Restore**: `fundoubler --restore` uses the latest delete log; `fundoubler --restore /path/to/log` uses a specific file. Prompts for each file unless `--skip-confirm`. Use `--logs-dir` if logs are not in `./logs`.
+
+  **Restore behavior:**
+  - Restores files by copying from the kept duplicate recorded in the log
+  - Skips files that already exist at the target location
+  - Reports errors if the source file (kept duplicate) is missing
+  - Creates parent directories as needed
+  - Per-file confirmation unless `--skip-confirm` is used
+
+### Link creation options (requires --delete)
+
+Instead of deleting duplicate files, create links pointing to the kept duplicate:
+
+- **Create symlinks**: `fundoubler --delete --create-symlinks` — replace duplicates with symlinks (Unix/Windows)
+- **Create hardlinks**: `fundoubler --delete --create-hardlinks` — replace duplicates with hardlinks (Unix/Windows)
+- **Create Windows shortcuts**: `fundoubler --delete --create-shortcuts` — replace duplicates with .lnk shortcuts (Windows only)
+- **Use kept file's name for links**: `fundoubler --delete --create-symlinks --no-keep-link-names` — links use the kept file's name instead of deleted file's name (shortcuts always get .lnk extension)
+
+**Behavior:**
+- Without `--no-keep-link-names`: Symlinks/hardlinks keep the deleted file's name; shortcuts get deleted file's name + `.lnk`
+- With `--no-keep-link-names`: Symlinks/hardlinks use the kept file's name; shortcuts use kept file's name + `.lnk`
+- Only one link type can be specified at a time
+- Link options require `--delete`; without `--delete` they are ignored
+- Confirmation dialogs and dry-run output show which link would be created
+- Original file is deleted first, then link is created at the same location
+- On Windows, symlinks may require admin privileges or developer mode; shortcuts work without special permissions
 
 
 ### Deletion flag interaction
@@ -127,14 +155,18 @@ How `--delete`, `--force-delete`, `--dry-run`, and `--skip-confirm` work togethe
 ```bash
 fundoubler --delete --dry-run /path              # Preview only
 fundoubler --delete --force-delete --skip-confirm /path   # Unattended deletion
+fundoubler --delete --create-symlinks /path      # Replace duplicates with symlinks
+fundoubler --delete --create-shortcuts --skip-confirm /path  # Replace with shortcuts (Windows)
 ```
 
 **Delete log and restore:**
 - Delete logs: `logs_dir/del_logs/YYYYMMDDHHMMSSfundel.log` (default `./logs/del_logs/`)
-- Each record: deleted path + kept duplicate path
-- `fundoubler --restore` — use latest log (in `./logs/del_logs/` or `--logs-dir`)
-- `fundoubler --restore /path/to/20260124120000fundel.log` — use specific log
+- Each record: deleted path + kept duplicate path (one per line, format: `deleted_path|kept_path`)
+- `fundoubler --restore` — use latest log (in `./logs/del_logs/` or `--logs-dir/del_logs/`)
+- `fundoubler --restore /path/to/20260124120000fundel.log` — use specific log file
 - Prompts for each file unless `--skip-confirm`
+- If a deleted file already exists, restore skips it
+- If the kept duplicate (source) is missing, restore reports an error and continues with other files
 
 ### Logging
 
@@ -147,6 +179,9 @@ fundoubler --delete --force-delete --skip-confirm /path   # Unattended deletion
 
 - **Sort order** (repeatable): `fundoubler --sort size-desc --sort name`
   - CLI values (kebab-case): `name`, `name-desc`, `size`, `size-desc`, `created`, `created-desc`, `modified`, `modified-desc`
+  - Multiple sort orders create a multi-level sort (primary, secondary, etc.)
+  - Default: `size-desc` then `name` (largest files first, then alphabetical)
+  - Sort order determines which file is kept in each duplicate group (first file after sorting is kept)
 - **Verbose**: `fundoubler -v` or `fundoubler -vv` (shows wasted space; `-vv` shows config)
 - **Silent**: `fundoubler -s` or `fundoubler --silent` (no console output; also disables progress bar)
 - **No progress bar**: `fundoubler --no-progress-bar` — hide the scan progress bar (scripts, CI)
@@ -183,7 +218,7 @@ compare_by_modified = false
 compare_by_md5 = false
 compare_by_sha512 = false
 min_size = 0
-max_size = 1073741824
+max_size = 1073741824  # Example: 1GB limit (default is u64::MAX = no limit)
 # name_filter = ".*\\.(jpg|png)$"   # Regex to match filenames
 # min_create_time = "2024-01-01"
 # max_create_time = "2024-12-31"
@@ -199,6 +234,10 @@ hash_cache_dir = ".fundoubler/.hashcache"
 log_level = 0
 logs_dir = "./logs"
 delete_log = true
+# create_symlinks = false
+# create_hardlinks = false
+# create_shortcuts = false   # Windows only
+# no_keep_link_names = false
 sort_orders = ["SizeDesc", "Name"]
 verbose = 0
 silent = false
@@ -206,23 +245,96 @@ no_progress_bar = false
 ```
 
 **Key options:**
+- **path_start**: Directory to scan (default: `.`). CLI: positional argument.
+- **output**: File to write duplicate report to (default: stdout). CLI: second positional argument.
+- **compare_by_***: Comparison criteria flags. Default: `compare_by_size = true`, `compare_by_xxh3 = true`.
 - **name_filter**: Regex to match filenames (e.g. `".*\\.(jpg|png)$"`). Omit to include all. CLI: `--filter`.
+- **min_size, max_size**: File size range in bytes. Default: `min_size = 0`, `max_size = 18446744073709551615` (u64::MAX).
 - **min_create_time, max_create_time**: Only include files created within this range.
 - **min_mod_time, max_mod_time**: Only include files modified within this range.
 
   Time formats: `YYYY-MM-DD`, `YYYY-MM-DD HH:MM:SS`, `YYYY-MM-DDTHH:MM:SS`, RFC 3339, Unix timestamp. On some Linux filesystems creation time may be unavailable; those files are then included.
 
 - **user_filter, group_filter**: (Unix only; ignored on Windows) Only include files owned by this user / in this group. Use username or numeric uid/gid.
-- **exclude_dirs**: Directories to skip during scan. Paths relative to `path_start` or absolute.
-- **source_dirs**: When duplicates are found, files in these dirs are kept; others marked for deletion.
-- **log_level**: 0 = off, 1 = error, 2 = info, 3 = debug. Logs go to `logs_dir`.
-- **logs_dir**: Directory for log files (default `./logs`). Files: `YYYYMMDDHHMMSSfun.log`.
-- **delete_log**: If true (default), record deletions in `logs_dir/del_logs/` for `--restore`.
-- **sort_orders**: In config use PascalCase (`SizeDesc`, `Name`); in CLI use kebab-case (`size-desc`, `name`).
-- **limit**: Maximum number of duplicate groups to display (e.g. `limit = 10`).
-- **no_progress_bar**: If true, hide the scan progress bar.
+- **exclude_dirs**: Directories to skip during scan. Paths relative to `path_start` or absolute. CLI: `--exclude-dir` (repeatable).
+- **source_dirs**: When duplicates are found, files in these dirs are kept; others marked for deletion. CLI: `--source-dir` (repeatable).
+- **hash_buffer_size**: Buffer size for reading files during hashing (default: 65536 bytes = 64KB). CLI: `--hash-buffer-size`.
+- **hash_cache**: Enable hash caching to avoid re-hashing unchanged files (default: false). CLI: `--hash-cache`.
+- **hash_cache_dir**: Directory for hash cache files (default: `.fundoubler/.hashcache`). CLI: `--hash-cache-dir`.
+- **log_level**: 0 = off, 1 = error, 2 = info, 3 = debug. Logs go to `logs_dir`. CLI: `-l`, `-ll`, `-lll`.
+- **logs_dir**: Directory for log files (default `./logs`). Files: `YYYYMMDDHHMMSSfun.log`. CLI: `--logs-dir`.
+- **delete_log**: If true (default), record deletions in `logs_dir/del_logs/` for `--restore`. CLI: `--no-delete-log` to disable.
+- **sort_orders**: In config use PascalCase (`SizeDesc`, `Name`); in CLI use kebab-case (`size-desc`, `name`). Default: `["SizeDesc", "Name"]`.
+- **limit**: Maximum number of duplicate groups to display (e.g. `limit = 10`). CLI: `--limit`.
+- **verbose**: Verbosity level 0-2 (default: 0). Level 1 shows wasted space, level 2 shows config. CLI: `-v`, `-vv`.
+- **silent**: If true, suppress all console output and disable progress bar (default: false). CLI: `-s`, `--silent`.
+- **no_progress_bar**: If true, hide the scan progress bar (default: false). CLI: `--no-progress-bar`.
+- **create_symlinks, create_hardlinks, create_shortcuts**: Link creation options (require `delete = true`). Only one can be true at a time. CLI: `--create-symlinks`, `--create-hardlinks`, `--create-shortcuts`.
+- **no_keep_link_names**: If true, links use kept file's name instead of deleted file's name (shortcuts always get .lnk). CLI: `--no-keep-link-names`.
 
-**Note:** `delete`, `force_delete`, and `dry_run` from config are overwritten by CLI. Use `--delete`, `--force-delete`, or `--dry-run` to control deletion behavior.
+**Important notes:**
+- **`delete`, `force_delete`, and `dry_run`** from config are **always overwritten by CLI**. Use `--delete`, `--force-delete`, or `--dry-run` to control deletion behavior.
+- **Link creation options** also require `--delete` CLI flag to work (even if `delete = true` in config).
+- **`skip_confirm`** is not saved in config file (CLI-only option for scripts).
+- When **no comparison flags** are passed via CLI, config/default values apply. When **any comparison flag** is passed, only those flags are used (exclusive mode).
+
+## Examples
+
+**Find duplicates by size only (fast, no hashing):**
+```bash
+fundoubler --size /path/to/scan
+```
+
+**Find duplicates by content hash and delete interactively:**
+```bash
+fundoubler --content --delete /path/to/scan
+```
+
+**Find duplicates, replace with symlinks, skip confirmations:**
+```bash
+fundoubler --md5 --delete --create-symlinks --skip-confirm /path/to/scan
+```
+
+**Preview deletions without actually deleting:**
+```bash
+fundoubler --delete --dry-run -vv /path/to/scan
+```
+
+**Find duplicates in photos directory, exclude thumbnails:**
+```bash
+fundoubler --content --exclude-dir thumbnails --exclude-dir .thumbnails /photos
+```
+
+**Restore deleted files from latest log:**
+```bash
+fundoubler --restore
+```
+
+**Use config file with CLI overrides:**
+```bash
+fundoubler --config myconfig.toml --delete --dry-run
+```
+
+## Troubleshooting
+
+**Progress bar not visible:**
+- Progress bar only appears in interactive terminals (TTY)
+- Use `--no-progress-bar` to explicitly disable it
+- Silent mode (`-s`) automatically disables progress bar
+
+**Symlinks fail on Windows:**
+- Windows symlinks require administrator privileges or developer mode
+- Use `--create-shortcuts` instead for Windows (works without special permissions)
+
+**Hash cache not working:**
+- Ensure `hash_cache_dir` is writable
+- Cache is keyed by file path and modification time
+- Delete cache directory to force re-hashing
+
+**Restore fails:**
+- Check that the kept duplicate file still exists
+- Verify log file path is correct
+- Use `--logs-dir` if logs are in a non-default location
 
 ## License
 

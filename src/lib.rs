@@ -6,6 +6,7 @@ pub mod del_log;
 pub mod filters;
 pub mod error;
 pub mod hash_cache;
+pub mod links;
 pub mod log;
 pub mod scanner;
 
@@ -154,6 +155,12 @@ fn display_results(groups: &[FileGroup], config: &ConfigFile) {
         return;
     }
 
+    let link_type = links::get_link_type_description(
+        config.create_symlinks,
+        config.create_hardlinks,
+        config.create_shortcuts,
+    );
+
     println!("\nFound {} groups of duplicates:", groups.len());
     println!("{}", "=".repeat(80));
 
@@ -162,8 +169,22 @@ fn display_results(groups: &[FileGroup], config: &ConfigFile) {
         println!("Criteria: {}", group.key);
         println!("Files:");
 
-        for path in &group.paths {
-            println!("  {}", path.display());
+        let kept = &group.paths[0];
+        for (idx, path) in group.paths.iter().enumerate() {
+            if idx == 0 {
+                println!("  {} (kept)", path.display());
+            } else {
+                if config.delete && config.dry_run {
+                    if let Some(lt) = link_type {
+                        let link_path = links::get_link_path(path, kept, config.no_keep_link_names, config.create_shortcuts);
+                        println!("  {} → would be replaced with {}: {}", path.display(), lt, link_path.display());
+                    } else {
+                        println!("  {} → would be deleted", path.display());
+                    }
+                } else {
+                    println!("  {}", path.display());
+                }
+            }
         }
 
         if config.verbose > 0 {
@@ -206,14 +227,29 @@ fn write_results(groups: &[FileGroup], output_path: &std::path::Path) -> Result<
 }
 
 fn handle_deletion(groups: &[FileGroup], config: &ConfigFile) -> Result<()> {
+    let link_type = links::get_link_type_description(
+        config.create_symlinks,
+        config.create_hardlinks,
+        config.create_shortcuts,
+    );
+
     if config.dry_run {
-        log::log_info("Deletion skipped (dry run)");
-        println!("\nDRY RUN: No files will be deleted.");
+        if let Some(lt) = link_type {
+            log::log_info(&format!("Link creation skipped (dry run): {}", lt));
+            println!("\nDRY RUN: No files will be deleted. Links would be created instead.");
+        } else {
+            log::log_info("Deletion skipped (dry run)");
+            println!("\nDRY RUN: No files will be deleted.");
+        }
         return Ok(());
     }
 
     if config.force_delete {
-        println!("\nWARNING: Force delete enabled. Files will be deleted without confirmation!");
+        if let Some(lt) = link_type {
+            println!("\nWARNING: Force mode enabled. Files will be replaced with {}s without confirmation!", lt);
+        } else {
+            println!("\nWARNING: Force delete enabled. Files will be deleted without confirmation!");
+        }
 
         if !config.skip_confirm {
             if !Confirm::new()
@@ -251,11 +287,26 @@ fn handle_deletion(groups: &[FileGroup], config: &ConfigFile) -> Result<()> {
     for group in groups {
         let kept = &group.paths[0];
         for (_i, path) in group.paths.iter().enumerate().skip(1) {
+            let link_path = if link_type.is_some() {
+                links::get_link_path(path, kept, config.no_keep_link_names, config.create_shortcuts)
+            } else {
+                std::path::PathBuf::new() // Not used when not creating links
+            };
+
             if !config.force_delete {
-                let prompt = format!("Delete {}? (Keep: {})", path.display(), kept.display());
+                let prompt = if let Some(lt) = link_type {
+                    format!(
+                        "Replace {} with {} pointing to {}?",
+                        path.display(),
+                        lt,
+                        kept.display()
+                    )
+                } else {
+                    format!("Delete {}? (Keep: {})", path.display(), kept.display())
+                };
 
                 if config.skip_confirm {
-                    // Assume yes - proceed to delete
+                    // Assume yes - proceed
                 } else if !Confirm::new()
                     .with_prompt(&prompt)
                     .default(false)
@@ -266,17 +317,41 @@ fn handle_deletion(groups: &[FileGroup], config: &ConfigFile) -> Result<()> {
                 }
             }
 
-            if config.verbose > 0 {
-                println!("Deleting: {}", path.display());
-            }
-
+            // Delete the original file first
             match std::fs::remove_file(path) {
                 Ok(_) => {
                     deleted_count += 1;
+
+                    // Create link if requested
+                    if let Some(lt) = link_type {
+                        let result = if config.create_symlinks {
+                            links::create_symlink(kept, &link_path)
+                        } else if config.create_hardlinks {
+                            links::create_hardlink(kept, &link_path)
+                        } else if config.create_shortcuts {
+                            links::create_shortcut(kept, &link_path)
+                        } else {
+                            Ok(())
+                        };
+
+                        match result {
+                            Ok(_) => {
+                                if config.verbose > 0 {
+                                    println!("  Created {}: {}", lt, link_path.display());
+                                }
+                            }
+                            Err(e) => {
+                                let msg = format!("Error creating {} at {}: {}", lt, link_path.display(), e);
+                                log::log_error(&msg);
+                                eprintln!("{}", msg);
+                            }
+                        }
+                    }
+
                     if let Some((_, ref mut f)) = &mut del_log_file {
                         let _ = del_log::write_record(f, path, kept);
                     }
-                    if config.verbose > 0 {
+                    if config.verbose > 0 && link_type.is_none() {
                         println!("  Deleted successfully.");
                     }
                 }
@@ -289,8 +364,13 @@ fn handle_deletion(groups: &[FileGroup], config: &ConfigFile) -> Result<()> {
         }
     }
 
-    log::log_info(&format!("Deleted {} duplicate files", deleted_count));
-    println!("\nDeleted {} duplicate files.", deleted_count);
+    if let Some(lt) = link_type {
+        log::log_info(&format!("Replaced {} files with {}s", deleted_count, lt));
+        println!("\nReplaced {} files with {}s.", deleted_count, lt);
+    } else {
+        log::log_info(&format!("Deleted {} duplicate files", deleted_count));
+        println!("\nDeleted {} duplicate files.", deleted_count);
+    }
     Ok(())
 }
 

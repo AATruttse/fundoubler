@@ -30,6 +30,9 @@ xxhash-rust = { version = "0.8", features = ["xxh3"] }  # Faster hashing
 [target.'cfg(unix)'.dependencies]
 users = "0.11"
 
+[target.'cfg(windows)'.dependencies]
+mslnk = "0.1"
+
 [dev-dependencies]
 assert_fs = "1.0"
 tempfile = "3.6"
