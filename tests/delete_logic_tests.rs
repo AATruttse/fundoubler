@@ -81,6 +81,7 @@ fn test_delete_correct_files_basic() {
     );
 }
 
+/// Dedicated test for sort order: which file is kept (first after sort) in a duplicate group.
 #[test]
 fn test_delete_keeps_first_file_in_sorted_group() {
     let temp_dir = TempDir::new().unwrap();

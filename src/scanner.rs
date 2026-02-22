@@ -52,25 +52,49 @@ impl FileScanner {
         let config = self.config.clone();
         let exclude_dirs = config.exclude_dirs.clone();
         let path_start = config.path_start.clone();
+        let search_dirs = config.search_dirs.clone();
+
+        // Build list of roots to scan: path_start + search_dirs (dedupe)
+        let mut roots: Vec<PathBuf> = vec![path_start.clone()];
+        for d in &search_dirs {
+            let resolved = if d.is_absolute() {
+                d.clone()
+            } else {
+                path_start.join(d)
+            };
+            let r = normalize_path(&resolved);
+            if !roots.iter().any(|x| normalize_path(x) == r) {
+                roots.push(resolved);
+            }
+        }
 
         crate::log::log_debug(&format!(
-            "Scanning directory: {}",
-            config.path_start.display()
+            "Scanning directories: {:?}",
+            roots.iter().map(|p| p.display().to_string()).collect::<Vec<_>>()
         ));
 
-        // Collect all files first (this is IO bound)
-        let entries: Vec<_> = WalkDir::new(&config.path_start)
-            .into_iter()
-            .filter_entry(|e| {
-                if e.file_type().is_dir() {
-                    !path_is_excluded(e.path(), &exclude_dirs, &path_start)
-                } else {
-                    true
+        // Collect all files from each root (dedupe by path)
+        let mut seen = std::collections::HashSet::<String>::new();
+        let mut entries: Vec<walkdir::DirEntry> = Vec::new();
+        for root in &roots {
+            for e in WalkDir::new(root)
+                .into_iter()
+                .filter_entry(|e| {
+                    if e.file_type().is_dir() {
+                        !path_is_excluded(e.path(), &exclude_dirs, &path_start)
+                    } else {
+                        true
+                    }
+                })
+                .filter_map(|e| e.ok())
+                .filter(|e| !e.file_type().is_dir())
+            {
+                let key = normalize_path(e.path());
+                if seen.insert(key) {
+                    entries.push(e);
                 }
-            })
-            .filter_map(|e| e.ok())
-            .filter(|e| !e.file_type().is_dir())
-            .collect();
+            }
+        }
 
         crate::log::log_debug(&format!("Collected {} files to process", entries.len()));
 
@@ -126,12 +150,18 @@ impl FileScanner {
             groups.entry(key).or_default().push(path);
         }
 
-        // Filter groups with duplicates and apply limit
+        // Filter groups with duplicates; when search_dirs is set, only keep groups that have at least one file in search_dirs
         let source_dirs = config.source_dirs.clone();
         let path_start = config.path_start.clone();
         let mut result: Vec<_> = groups
             .into_iter()
             .filter(|(_, paths)| paths.len() > 1)
+            .filter(|(_, paths)| {
+                search_dirs.is_empty()
+                    || paths
+                        .iter()
+                        .any(|p| path_is_in_search_dirs(p, &search_dirs, &path_start))
+            })
             .map(|(key, mut paths)| {
                 sort_paths_source_first(&mut paths, &source_dirs, &path_start);
                 FileGroup { key, paths }
@@ -328,6 +358,27 @@ fn path_is_in_source(file_path: &Path, source_dirs: &[PathBuf], path_start: &Pat
             normalize_path(source)
         } else {
             let resolved = path_start.join(source);
+            normalize_path(&resolved)
+        };
+        if p == s || p.starts_with(&format!("{}/", s)) || p.starts_with(&s) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Returns true if the file is under one of search_dirs (used to restrict reported groups).
+fn path_is_in_search_dirs(file_path: &Path, search_dirs: &[PathBuf], path_start: &Path) -> bool {
+    if search_dirs.is_empty() {
+        return false;
+    }
+    let parent = file_path.parent().unwrap_or(file_path);
+    let p = normalize_path(parent);
+    for search in search_dirs {
+        let s = if search.is_absolute() {
+            normalize_path(search)
+        } else {
+            let resolved = path_start.join(search);
             normalize_path(&resolved)
         };
         if p == s || p.starts_with(&format!("{}/", s)) || p.starts_with(&s) {

@@ -183,6 +183,10 @@ pub struct CliOptions {
     #[arg(long)]
     pub source_dir: Vec<PathBuf>,
 
+    /// Directory to search for duplicates (only report groups that have at least one file in these dirs)
+    #[arg(long)]
+    pub search_dir: Vec<PathBuf>,
+
     /// Hash read buffer size in bytes (default: 64KB)
     #[arg(long)]
     pub hash_buffer_size: Option<u64>,
@@ -307,6 +311,12 @@ pub struct ConfigFile {
         deserialize_with = "vec_path_from_str"
     )]
     pub source_dirs: Vec<PathBuf>,
+    #[serde(
+        default,
+        serialize_with = "vec_path_to_str",
+        deserialize_with = "vec_path_from_str"
+    )]
+    pub search_dirs: Vec<PathBuf>,
 
     #[serde(default = "default_hash_buffer_size")]
     pub hash_buffer_size: u64,
@@ -374,6 +384,7 @@ impl Default for ConfigFile {
             group_filter: None,
             exclude_dirs: Vec::new(),
             source_dirs: Vec::new(),
+            search_dirs: Vec::new(),
             hash_buffer_size: DEFAULT_HASH_BUFFER_SIZE,
             hash_cache: false,
             hash_cache_dir: default_hash_cache_dir(),
@@ -521,6 +532,9 @@ impl ConfigFile {
         }
         if !cli.source_dir.is_empty() {
             config.source_dirs = cli.source_dir.clone();
+        }
+        if !cli.search_dir.is_empty() {
+            config.search_dirs = cli.search_dir.clone();
         }
         if let Some(buf) = cli.hash_buffer_size {
             config.hash_buffer_size = buf;

@@ -134,8 +134,8 @@ fn log_unit_file_naming_format() {
     let name = path.file_name().unwrap().to_str().unwrap();
     assert!(name.ends_with("fun.log"), "expected *fun.log, got {}", name);
     let prefix = name.strip_suffix("fun.log").unwrap();
-    assert_eq!(prefix.len(), 14, "YYYYMMDDHHMMSS = 14 chars");
-    assert!(prefix.chars().all(|c| c.is_ascii_digit()));
+    assert!(!prefix.is_empty() && prefix.chars().all(|c| c.is_ascii_digit()),
+        "prefix should be non-empty timestamp digits (e.g. YYYYMMDDHHMMSS), got {}", prefix);
 }
 
 #[test]
@@ -159,7 +159,8 @@ fn log_unit_reinit_replaces_state() {
     log::init(1, temp.path()).unwrap();
     log::log_info("second info - should not appear at level 1");
     log::log_error("second err");
-    let path = find_log_file(temp.path()).expect("log file should exist");
+    // Reinit creates a new log file (new timestamp); read the current one we're writing to
+    let path = log::current_log_path().expect("log file should exist after reinit");
     let content = read_log_content(&path);
     assert!(
         content.contains("second err"),

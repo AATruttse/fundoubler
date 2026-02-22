@@ -100,6 +100,7 @@ fn test_size_and_hash_comparison() {
     );
 }
 
+/// Full integration: dry-run deletion flow; verifies dry-run output and that no files are deleted.
 #[test]
 fn test_delete_keeps_first_file_in_group() {
     let temp_dir = TempDir::new().unwrap();

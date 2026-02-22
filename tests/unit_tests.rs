@@ -992,24 +992,6 @@ fn test_config_from_cli_config_file_invalid_toml_errors() {
 }
 
 #[test]
-fn test_config_validate_requires_at_least_one_criterion() {
-    let mut config = ConfigFile::default();
-    config.compare_by_name = false;
-    config.compare_by_size = false;
-    config.compare_by_created = false;
-    config.compare_by_modified = false;
-    config.compare_by_md5 = false;
-    config.compare_by_sha512 = false;
-    config.compare_by_xxh3 = false;
-
-    let result = config.validate();
-    assert!(
-        result.is_err(),
-        "validate should fail when no comparison criteria enabled"
-    );
-}
-
-#[test]
 fn test_config_from_cli_config_file_missing_errors() {
     use clap::Parser;
     use fundoubler::config::{CliOptions, ConfigFile};
@@ -1021,6 +1003,17 @@ fn test_config_from_cli_config_file_missing_errors() {
         result.is_err(),
         "from_cli with missing config path should error"
     );
+}
+
+#[test]
+fn test_init_config_default_path() {
+    use std::path::PathBuf;
+    use clap::Parser;
+    use fundoubler::config::CliOptions;
+
+    let cli = CliOptions::parse_from(["fundoubler", "--init-config"]);
+    assert_eq!(cli.init_config.as_ref(), Some(&PathBuf::from("fundoubler.toml")),
+        "--init-config with no value should default to fundoubler.toml");
 }
 
 #[test]

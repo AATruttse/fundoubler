@@ -8,6 +8,7 @@ A fast, cross-platform utility for finding and removing file duplicates written 
 - **Multiple comparison methods**: Size, name, creation/modification dates, and hash algorithms (MD5, SHA512, XXH3)
 - **Smart filtering**: Filter by size, name patterns (regex), time ranges (creation/modification), user and group (Unix), exclude directories
 - **Source directories**: Prefer files in specified dirs when choosing which duplicate to keep
+- **Search directories**: Only report duplicate groups that have at least one file in specified dirs (e.g. find duplicates of source files in a specific folder)
 - **Safe deletion**: Interactive per-file confirmation, dry-run mode, or unattended with `--skip-confirm`
 - **Link creation**: Replace duplicates with symlinks, hardlinks, or Windows shortcuts instead of deleting
 - **Delete log and restore**: Records deletions for undo; restore files from logs with `--restore`
@@ -28,6 +29,8 @@ cd fundoubler
 cargo build --release
 ```
 
+Run tests: `cargo test`. Run benchmarks: `cargo bench`.
+
 ## Usage
 
 ```text
@@ -43,6 +46,8 @@ fundoubler [OPTIONS] [PATH_START] [OUTPUT]
 - **Init config**: `fundoubler --init-config` — create default config file and exit
 
 Run `fundoubler --help` for the full list of options.
+
+**Short flags:** `-n` (name), `-d` (delete), `-f` (force-delete), `-t` (content), `-v`/`-vv` (verbose), `-s` (silent), `-l`/`-ll`/`-lll` (log level).
 
 ### Basic usage
 
@@ -84,6 +89,7 @@ Default behavior compares by **size** and **XXH3** hash. Via CLI or config file:
 - **Group filter** (Unix only; ignored on Windows): `fundoubler --group-filter mygroup` or `--group-filter 100` — only files in this group
 - **Exclude directories** (repeatable): `fundoubler --exclude-dir node_modules --exclude-dir target`
 - **Source directories** (repeatable): `fundoubler --source-dir /backup/primary` — when duplicates are found, files in source dirs are kept; others are marked for deletion
+- **Search directories** (repeatable): `fundoubler --search-dir /path/to/search` — only report duplicate groups that have at least one file in these directories. Use with `--source-dir` to find duplicates of source files that lie in the search dirs. When not set, all duplicate groups under the scan root are reported.
 - **Limit groups shown**: `fundoubler --limit 10`
 
 ### Hash options
@@ -98,7 +104,7 @@ Default behavior compares by **size** and **XXH3** hash. Via CLI or config file:
 - **Dry run (no deletions)**: `fundoubler --delete --dry-run`
 - **Skip confirmation prompts** (scripts, CI): `fundoubler --skip-confirm` — assumes "yes" to all prompts
 - **Delete log** (default: on): Records each deleted file and its kept duplicate for restore. Use `--no-delete-log` to disable.
-- **Restore**: `fundoubler --restore` uses the latest delete log; `fundoubler --restore /path/to/log` uses a specific file. Prompts for each file unless `--skip-confirm`. Use `--logs-dir` if logs are not in `./logs`.
+- **Restore**: `fundoubler --restore` uses the latest delete log; `fundoubler --restore /path/to/log` uses a specific file. Prompts for each file unless `--skip-confirm`. Use `--logs-dir /path` if logs are not in `./logs`; with `--restore`, delete logs are read from `/path/del_logs/`.
 
   **Restore behavior:**
   - Restores files by copying from the kept duplicate recorded in the log
@@ -161,7 +167,7 @@ fundoubler --delete --create-shortcuts --skip-confirm /path  # Replace with shor
 
 **Delete log and restore:**
 - Delete logs: `logs_dir/del_logs/YYYYMMDDHHMMSSfundel.log` (default `./logs/del_logs/`)
-- Each record: deleted path + kept duplicate path (one per line, format: `deleted_path|kept_path`)
+- Each record: two lines per pair — `deleted:<path>` then `source:<path>` (the kept duplicate)
 - `fundoubler --restore` — use latest log (in `./logs/del_logs/` or `--logs-dir/del_logs/`)
 - `fundoubler --restore /path/to/20260124120000fundel.log` — use specific log file
 - Prompts for each file unless `--skip-confirm`
@@ -228,6 +234,7 @@ max_size = 1073741824  # Example: 1GB limit (default is u64::MAX = no limit)
 # group_filter = "mygroup" # Unix only; ignored on Windows
 exclude_dirs = ["node_modules", "target", ".git"]
 source_dirs = ["./backup", "/primary/photos"]
+# search_dirs = ["./downloads", "./cache"]   # Only report groups that have a file in these dirs
 hash_buffer_size = 65536
 hash_cache = false
 hash_cache_dir = ".fundoubler/.hashcache"
@@ -258,6 +265,7 @@ no_progress_bar = false
 - **user_filter, group_filter**: (Unix only; ignored on Windows) Only include files owned by this user / in this group. Use username or numeric uid/gid.
 - **exclude_dirs**: Directories to skip during scan. Paths relative to `path_start` or absolute. CLI: `--exclude-dir` (repeatable).
 - **source_dirs**: When duplicates are found, files in these dirs are kept; others marked for deletion. CLI: `--source-dir` (repeatable).
+- **search_dirs**: Only report duplicate groups that have at least one file in these directories. When empty (default), all duplicate groups are reported. Use with `source_dirs` to find duplicates of source files that lie in the search dirs. CLI: `--search-dir` (repeatable).
 - **hash_buffer_size**: Buffer size for reading files during hashing (default: 65536 bytes = 64KB). CLI: `--hash-buffer-size`.
 - **hash_cache**: Enable hash caching to avoid re-hashing unchanged files (default: false). CLI: `--hash-cache`.
 - **hash_cache_dir**: Directory for hash cache files (default: `.fundoubler/.hashcache`). CLI: `--hash-cache-dir`.
@@ -303,6 +311,11 @@ fundoubler --delete --dry-run -vv /path/to/scan
 **Find duplicates in photos directory, exclude thumbnails:**
 ```bash
 fundoubler --content --exclude-dir thumbnails --exclude-dir .thumbnails /photos
+```
+
+**Find duplicates of files in source dir that appear in search dir (only report groups touching search dir):**
+```bash
+fundoubler --content --source-dir /canonical --search-dir /downloads /path
 ```
 
 **Restore deleted files from latest log:**

@@ -2,7 +2,6 @@
 
 use assert_fs::prelude::*;
 use assert_fs::TempDir;
-use std::fs;
 use std::path::Path;
 use std::process::Command;
 
@@ -126,6 +125,15 @@ fn links_get_link_path_shortcut_with_kept_name() {
     assert_eq!(link_path, Path::new("/a/b/original.lnk"));
 }
 
+#[cfg(not(windows))]
+#[test]
+fn create_shortcut_on_non_windows_returns_error() {
+    let result = links::create_shortcut(Path::new("/target"), Path::new("/link.lnk"));
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("Windows") || err.contains("shortcut"), "expected Windows/shortcut in error, got: {}", err);
+}
+
 // ============= Integration: dry-run shows link info =============
 
 #[test]
@@ -178,11 +186,11 @@ fn integration_create_symlink() {
     // Original file should still exist (it's kept)
     assert!(temp.path().join("original.txt").exists(), "original.txt should be kept");
     // Duplicate file should be replaced by symlink
-    assert!(!duplicate_file.exists() || fs::symlink_metadata(&link).is_ok(), 
+    assert!(!duplicate_file.exists() || std::fs::symlink_metadata(&link).is_ok(), 
             "duplicate.txt should be replaced by symlink");
     // Verify symlink exists and points to original
     if link.exists() {
-        let target = fs::read_link(&link).expect("Should be able to read symlink");
+        let target = std::fs::read_link(&link).expect("Should be able to read symlink");
         assert!(target.ends_with("original.txt"), "Symlink should point to original.txt");
     }
 }
@@ -224,8 +232,8 @@ fn integration_create_hardlink() {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        let original_meta = fs::metadata(temp.path().join("original.txt")).unwrap();
-        let link_meta = fs::metadata(&link).unwrap();
+        let original_meta = std::fs::metadata(temp.path().join("original.txt")).unwrap();
+        let link_meta = std::fs::metadata(&link).unwrap();
         assert_eq!(original_meta.ino(), link_meta.ino(), "Hardlink should have same inode as original");
     }
 }
@@ -356,7 +364,7 @@ fn integration_symlink_no_keep_link_names_different_dirs() {
     assert!(kept_file.exists(), "dir1/file.txt should be kept");
     // The link should exist (replacing deleted file)
     if link.exists() {
-        let target = fs::read_link(&link).expect("Should be able to read symlink");
+        let target = std::fs::read_link(&link).expect("Should be able to read symlink");
         // Target should point to the kept file
         assert!(target.to_string_lossy().contains("dir1/file.txt") || 
                 target.to_string_lossy().contains("file.txt"),
@@ -402,8 +410,8 @@ fn integration_hardlink_no_keep_link_names_different_dirs() {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        let kept_meta = fs::metadata(&kept_file).unwrap();
-        let link_meta = fs::metadata(&link).unwrap();
+        let kept_meta = std::fs::metadata(&kept_file).unwrap();
+        let link_meta = std::fs::metadata(&link).unwrap();
         assert_eq!(kept_meta.ino(), link_meta.ino(), "Hardlink should have same inode");
     }
 }
@@ -477,11 +485,11 @@ fn integration_multiple_files_get_links() {
     assert!(kept.exists(), "a.txt should be kept");
     // Both b.txt and c.txt should be replaced by symlinks
     if link_b.exists() {
-        let target_b = fs::read_link(&link_b).expect("Should read symlink b");
+        let target_b = std::fs::read_link(&link_b).expect("Should read symlink b");
         assert!(target_b.ends_with("a.txt"), "b.txt symlink should point to a.txt");
     }
     if link_c.exists() {
-        let target_c = fs::read_link(&link_c).expect("Should read symlink c");
+        let target_c = std::fs::read_link(&link_c).expect("Should read symlink c");
         assert!(target_c.ends_with("a.txt"), "c.txt symlink should point to a.txt");
     }
 }
@@ -544,7 +552,7 @@ fn integration_link_creation_with_force_delete() {
     
     assert!(kept.exists(), "original.txt should be kept");
     if link.exists() {
-        let target = fs::read_link(&link).expect("Should read symlink");
+        let target = std::fs::read_link(&link).expect("Should read symlink");
         assert!(target.ends_with("original.txt"), "Symlink should point to original.txt");
     }
 }
@@ -590,7 +598,7 @@ fn integration_link_creation_sort_size_desc() {
     
     // At least one file should be kept, and if b.txt exists as symlink, it should point to kept file
     if link.exists() {
-        let target = fs::read_link(&link).ok();
+        let target = std::fs::read_link(&link).ok();
         if let Some(t) = target {
             assert!(t.ends_with("a.txt") || kept.exists(), "Symlink should point to kept file");
         }
@@ -626,7 +634,7 @@ fn integration_link_creation_no_extension() {
     
     assert!(kept.exists(), "original should be kept");
     if link.exists() {
-        let target = fs::read_link(&link).expect("Should read symlink");
+        let target = std::fs::read_link(&link).expect("Should read symlink");
         assert!(target.ends_with("original"), "Symlink should point to original");
     }
 }

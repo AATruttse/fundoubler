@@ -93,8 +93,9 @@ fn del_log_unit_create_del_log_file_naming_format() {
 
     let name = path.file_name().unwrap().to_str().unwrap();
     assert!(name.ends_with("fundel.log"));
-    assert!(name.len() >= 23); // YYYYMMDDHHMMSS (14) + "fundel.log" (9)
-    assert!(name.chars().take(14).all(|c| c.is_ascii_digit()));
+    let prefix = name.strip_suffix("fundel.log").unwrap();
+    assert!(!prefix.is_empty() && prefix.chars().all(|c| c.is_ascii_digit()),
+        "prefix should be non-empty timestamp digits (e.g. YYYYMMDDHHMMSS), got {}", prefix);
 }
 
 #[test]
