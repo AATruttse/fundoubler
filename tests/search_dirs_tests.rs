@@ -73,6 +73,88 @@ search_dirs = ["search_here", "and_here"]
 }
 
 #[test]
+fn config_file_unique() {
+    let temp = TempDir::new().unwrap();
+    let config_path = temp.path().join("config.toml");
+    std::fs::write(
+        &config_path,
+        r#"
+path_start = "."
+compare_by_size = true
+compare_by_xxh3 = true
+search_dirs = ["search_here"]
+source_dirs = ["origin_here"]
+unique = true
+"#,
+    )
+    .unwrap();
+
+    let config = ConfigFile::from_cli(&CliOptions::parse_from([
+        "fundoubler",
+        "--config",
+        config_path.to_str().unwrap(),
+        ".",
+    ]))
+    .unwrap();
+    assert!(config.unique);
+    assert_eq!(config.search_dirs.len(), 1);
+    assert_eq!(config.source_dirs.len(), 1);
+}
+
+#[test]
+fn config_cli_unique_parsing() {
+    let config = ConfigFile::from_cli(&CliOptions::parse_from([
+        "fundoubler",
+        ".",
+        "--search-dir",
+        "s",
+        "--source-dir",
+        "o",
+        "--unique",
+    ]))
+    .unwrap();
+    assert!(config.unique);
+}
+
+#[test]
+fn config_unique_requires_search_and_source() {
+    // --unique without --search-dir: validate fails
+    let config = ConfigFile::from_cli(&CliOptions::parse_from([
+        "fundoubler",
+        ".",
+        "--source-dir",
+        "source",
+        "--unique",
+    ]))
+    .unwrap();
+    assert!(config.validate().is_err());
+
+    // --unique without --source-dir: validate fails
+    let config = ConfigFile::from_cli(&CliOptions::parse_from([
+        "fundoubler",
+        ".",
+        "--search-dir",
+        "search",
+        "--unique",
+    ]))
+    .unwrap();
+    assert!(config.validate().is_err());
+
+    // --unique with both should succeed
+    let config = ConfigFile::from_cli(&CliOptions::parse_from([
+        "fundoubler",
+        ".",
+        "--search-dir",
+        "search",
+        "--source-dir",
+        "source",
+        "--unique",
+    ]))
+    .unwrap();
+    assert!(config.validate().is_ok());
+}
+
+#[test]
 fn config_file_search_dirs_overridden_by_cli() {
     let temp = TempDir::new().unwrap();
     let config_path = temp.path().join("config.toml");
@@ -213,6 +295,70 @@ fn search_unit_search_dir_and_source_dir() {
     assert!(norm(&groups[0].paths[1]).contains("search"));
 }
 
+// ============= Unit: --unique =============
+
+#[test]
+fn search_unit_unique_without_source_excludes_groups_with_file_in_source() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let source = root.join("origin");
+    let search = root.join("search");
+    let other = root.join("other");
+    std::fs::create_dir_all(&source).unwrap();
+    std::fs::create_dir_all(&search).unwrap();
+    std::fs::create_dir_all(&other).unwrap();
+
+    // Group A: source + search (duplicate of origin) -> EXCLUDED with --unique
+    std::fs::write(source.join("orig.txt"), "content_a").unwrap();
+    std::fs::write(search.join("copy_a.txt"), "content_a").unwrap();
+
+    // Group B: search + other (both outside source) -> INCLUDED with --unique
+    std::fs::write(search.join("dup1.txt"), "content_b").unwrap();
+    std::fs::write(other.join("dup2.txt"), "content_b").unwrap();
+
+    let mut config = ConfigFile::default();
+    config.path_start = root.to_path_buf();
+    config.compare_by_xxh3 = true;
+    config.compare_by_size = true;
+    config.source_dirs = vec![source.clone()];
+    config.search_dirs = vec![search.clone()];
+    config.unique = true;
+
+    let scanner = FileScanner::new(&config, false);
+    let groups = scanner.scan().unwrap();
+    // Only group B (no file in source)
+    assert_eq!(groups.len(), 1, "Only group without file in source should be shown");
+    assert!(groups[0].paths.iter().any(|p| norm(p).contains("dup1") || norm(p).contains("dup2")));
+}
+
+#[test]
+fn search_unit_unique_shows_groups_with_only_search_files() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let source = root.join("origin");
+    let search = root.join("search");
+    std::fs::create_dir_all(&source).unwrap();
+    std::fs::create_dir_all(&search).unwrap();
+
+    // Both in search: dup1 and dup2
+    std::fs::write(search.join("dup1.txt"), "same").unwrap();
+    std::fs::write(search.join("dup2.txt"), "same").unwrap();
+
+    let mut config = ConfigFile::default();
+    config.path_start = root.to_path_buf();
+    config.compare_by_xxh3 = true;
+    config.compare_by_size = true;
+    config.source_dirs = vec![source.clone()];
+    config.search_dirs = vec![search.clone()];
+    config.unique = true;
+
+    let scanner = FileScanner::new(&config, false);
+    let groups = scanner.scan().unwrap();
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].paths.len(), 2);
+    assert!(groups[0].paths.iter().all(|p| norm(p).contains("search")));
+}
+
 // ============= Integration =============
 
 #[test]
@@ -269,6 +415,104 @@ fn integration_search_dir_with_source_dir() {
     assert!(status.success(), "stderr: {}", stderr);
     assert!(stdout.contains("Found 1 groups") || stdout.contains("Group 1"));
     assert!(stdout.contains("source") && stdout.contains("search"));
+}
+
+#[test]
+fn integration_unique_shows_only_unique_files() {
+    let temp = TempDir::new().unwrap();
+    let source = temp.child("origin");
+    let search = temp.child("search");
+    let other = temp.child("other");
+    source.create_dir_all().unwrap();
+    search.create_dir_all().unwrap();
+    other.create_dir_all().unwrap();
+
+    // Duplicate of origin: source + search -> excluded with --unique
+    source.child("canonical.txt").write_str("dup_of_origin").unwrap();
+    search.child("copy.txt").write_str("dup_of_origin").unwrap();
+
+    // Unique to search: search + other (no origin) -> included with --unique
+    search.child("unique1.txt").write_str("unique_content").unwrap();
+    other.child("unique2.txt").write_str("unique_content").unwrap();
+
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp.path().to_str().unwrap(),
+        "--md5",
+        "--size",
+        "--source-dir",
+        temp.path().join("origin").to_str().unwrap(),
+        "--search-dir",
+        temp.path().join("search").to_str().unwrap(),
+        "--unique",
+    ]);
+
+    assert!(status.success(), "stderr: {}", stderr);
+    assert!(stdout.contains("Found 1 groups"), "Only unique group (no origin) should be shown");
+    assert!(stdout.contains("unique1") || stdout.contains("unique2"), "Unique group files should appear");
+}
+
+#[test]
+fn integration_unique_delete_removes_duplicates() {
+    let temp = TempDir::new().unwrap();
+    let source = temp.child("origin");
+    let search = temp.child("search");
+    let other = temp.child("other");
+    source.create_dir_all().unwrap();
+    search.create_dir_all().unwrap();
+    other.create_dir_all().unwrap();
+
+    // Unique group: both in search/other, no origin
+    search.child("del_me.txt").write_str("unique_dup").unwrap();
+    other.child("keep_me.txt").write_str("unique_dup").unwrap();
+
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp.path().to_str().unwrap(),
+        "--md5",
+        "--size",
+        "--source-dir",
+        temp.path().join("origin").to_str().unwrap(),
+        "--search-dir",
+        temp.path().join("search").to_str().unwrap(),
+        "--unique",
+        "--delete",
+        "--dry-run",
+    ]);
+
+    assert!(status.success(), "stderr: {}", stderr);
+    assert!(stdout.contains("DRY RUN"));
+    assert!(stdout.contains("del_me") || stdout.contains("keep_me"));
+}
+
+#[test]
+fn integration_unique_with_symlinks_dry_run() {
+    let temp = TempDir::new().unwrap();
+    let source = temp.child("origin");
+    let search = temp.child("search");
+    let other = temp.child("other");
+    source.create_dir_all().unwrap();
+    search.create_dir_all().unwrap();
+    other.create_dir_all().unwrap();
+
+    search.child("dup1.txt").write_str("content").unwrap();
+    other.child("dup2.txt").write_str("content").unwrap();
+
+    let (stdout, stderr, status) = run_fundoubler(&[
+        temp.path().to_str().unwrap(),
+        "--md5",
+        "--size",
+        "--source-dir",
+        temp.path().join("origin").to_str().unwrap(),
+        "--search-dir",
+        temp.path().join("search").to_str().unwrap(),
+        "--unique",
+        "--delete",
+        "--create-symlinks",
+        "--dry-run",
+    ]);
+
+    assert!(status.success(), "stderr: {}", stderr);
+    assert!(stdout.contains("DRY RUN"));
+    assert!(stdout.contains("symlink") || stdout.contains("would be replaced"));
 }
 
 #[test]

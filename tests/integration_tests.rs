@@ -908,6 +908,8 @@ fn test_init_config_includes_all_fields() {
     assert!(content.contains("hash_buffer_size"));
     assert!(content.contains("exclude_dirs"));
     assert!(content.contains("source_dirs"));
+    assert!(content.contains("search_dirs"));
+    assert!(content.contains("unique"));
     assert!(content.contains("log_level"));
     assert!(content.contains("logs_dir"));
     assert!(content.contains("delete_log"));

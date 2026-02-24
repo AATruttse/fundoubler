@@ -90,6 +90,7 @@ Default behavior compares by **size** and **XXH3** hash. Via CLI or config file:
 - **Exclude directories** (repeatable): `fundoubler --exclude-dir node_modules --exclude-dir target`
 - **Source directories** (repeatable): `fundoubler --source-dir /backup/primary` — when duplicates are found, files in source dirs are kept; others are marked for deletion
 - **Search directories** (repeatable): `fundoubler --search-dir /path/to/search` — only report duplicate groups that have at least one file in these directories. Use with `--source-dir` to find duplicates of source files that lie in the search dirs. When not set, all duplicate groups under the scan root are reported.
+- **Unique** (requires `--search-dir` and `--source-dir`): `fundoubler --unique` — show only files that are *not* duplicates of origin (source dir). Excludes groups that have any file in source dir; reports only groups where all files are outside origin. With `--delete`, deletes duplicates (or creates links) in the reported groups as usual.
 - **Limit groups shown**: `fundoubler --limit 10`
 
 ### Hash options
@@ -266,6 +267,7 @@ no_progress_bar = false
 - **exclude_dirs**: Directories to skip during scan. Paths relative to `path_start` or absolute. CLI: `--exclude-dir` (repeatable).
 - **source_dirs**: When duplicates are found, files in these dirs are kept; others marked for deletion. CLI: `--source-dir` (repeatable).
 - **search_dirs**: Only report duplicate groups that have at least one file in these directories. When empty (default), all duplicate groups are reported. Use with `source_dirs` to find duplicates of source files that lie in the search dirs. CLI: `--search-dir` (repeatable).
+- **unique**: With `search_dirs` and `source_dirs`, show only groups where no file is in `source_dirs` (files unique to search area). Requires both `search_dirs` and `source_dirs`. CLI: `--unique`.
 - **hash_buffer_size**: Buffer size for reading files during hashing (default: 65536 bytes = 64KB). CLI: `--hash-buffer-size`.
 - **hash_cache**: Enable hash caching to avoid re-hashing unchanged files (default: false). CLI: `--hash-cache`.
 - **hash_cache_dir**: Directory for hash cache files (default: `.fundoubler/.hashcache`). CLI: `--hash-cache-dir`.
@@ -316,6 +318,12 @@ fundoubler --content --exclude-dir thumbnails --exclude-dir .thumbnails /photos
 **Find duplicates of files in source dir that appear in search dir (only report groups touching search dir):**
 ```bash
 fundoubler --content --source-dir /canonical --search-dir /downloads /path
+```
+
+**Show only files in search dir that are NOT duplicates of origin (unique files); with --delete, remove duplicates:**
+```bash
+fundoubler --content --source-dir /canonical --search-dir /downloads --unique /path
+fundoubler --content --source-dir /canonical --search-dir /downloads --unique --delete --dry-run /path
 ```
 
 **Restore deleted files from latest log:**

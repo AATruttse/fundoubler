@@ -147,7 +147,12 @@ fn log_unit_creates_logs_dir() {
     assert!(sub.exists());
     assert!(sub.is_dir());
     let path = log::current_log_path().unwrap();
-    assert!(path.parent().unwrap() == sub);
+    // Use canonicalize for robust path comparison across platforms (Windows path normalization)
+    assert_eq!(
+        path.parent().unwrap().canonicalize().unwrap(),
+        sub.canonicalize().unwrap(),
+        "log file should be in sub dir"
+    );
 }
 
 #[test]

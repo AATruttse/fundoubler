@@ -153,6 +153,7 @@ impl FileScanner {
         // Filter groups with duplicates; when search_dirs is set, only keep groups that have at least one file in search_dirs
         let source_dirs = config.source_dirs.clone();
         let path_start = config.path_start.clone();
+        let unique = config.unique;
         let mut result: Vec<_> = groups
             .into_iter()
             .filter(|(_, paths)| paths.len() > 1)
@@ -161,6 +162,15 @@ impl FileScanner {
                     || paths
                         .iter()
                         .any(|p| path_is_in_search_dirs(p, &search_dirs, &path_start))
+            })
+            .filter(|(_, paths)| {
+                // --unique: only groups where NO file is in source_dirs (files unique to search area)
+                if !unique {
+                    return true;
+                }
+                !paths
+                    .iter()
+                    .any(|p| path_is_in_source(p, &source_dirs, &path_start))
             })
             .map(|(key, mut paths)| {
                 sort_paths_source_first(&mut paths, &source_dirs, &path_start);

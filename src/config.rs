@@ -187,6 +187,10 @@ pub struct CliOptions {
     #[arg(long)]
     pub search_dir: Vec<PathBuf>,
 
+    /// With search-dir: show only files that are not duplicates of origin (source-dir). Requires --search-dir and --source-dir.
+    #[arg(long)]
+    pub unique: bool,
+
     /// Hash read buffer size in bytes (default: 64KB)
     #[arg(long)]
     pub hash_buffer_size: Option<u64>,
@@ -317,6 +321,9 @@ pub struct ConfigFile {
         deserialize_with = "vec_path_from_str"
     )]
     pub search_dirs: Vec<PathBuf>,
+    /// With search_dirs: show only groups where no file is in source_dirs (files unique to search area)
+    #[serde(default)]
+    pub unique: bool,
 
     #[serde(default = "default_hash_buffer_size")]
     pub hash_buffer_size: u64,
@@ -385,6 +392,7 @@ impl Default for ConfigFile {
             exclude_dirs: Vec::new(),
             source_dirs: Vec::new(),
             search_dirs: Vec::new(),
+            unique: false,
             hash_buffer_size: DEFAULT_HASH_BUFFER_SIZE,
             hash_cache: false,
             hash_cache_dir: default_hash_cache_dir(),
@@ -536,6 +544,9 @@ impl ConfigFile {
         if !cli.search_dir.is_empty() {
             config.search_dirs = cli.search_dir.clone();
         }
+        if cli.unique {
+            config.unique = true;
+        }
         if let Some(buf) = cli.hash_buffer_size {
             config.hash_buffer_size = buf;
         }
@@ -613,6 +624,13 @@ impl ConfigFile {
         if link_count > 1 {
             return Err(crate::error::AppError::Config(
                 "Only one link type can be specified at a time (--create-symlinks, --create-hardlinks, or --create-shortcuts)".to_string(),
+            ));
+        }
+
+        // --unique requires --search-dir and --source-dir
+        if self.unique && (self.search_dirs.is_empty() || self.source_dirs.is_empty()) {
+            return Err(crate::error::AppError::Config(
+                "--unique requires both --search-dir and --source-dir".to_string(),
             ));
         }
 
