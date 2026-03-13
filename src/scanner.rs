@@ -19,6 +19,21 @@ pub struct FileScanner {
     cache: Option<Arc<HashCache>>,
 }
 
+#[derive(Clone)]
+struct CandidateFile {
+    path: PathBuf,
+    base_key: CheckOptions,
+    size: u64,
+    mtime: Option<std::time::SystemTime>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct PreGroupKey {
+    base_key: CheckOptions,
+    // When any hash comparison is enabled, equal size is required before hashing.
+    size_gate: Option<u64>,
+}
+
 impl FileScanner {
     pub fn new(config: &ConfigFile, show_progress: bool) -> Self {
         let progress_bar = if show_progress && !config.silent && !config.no_progress_bar {
@@ -108,14 +123,16 @@ impl FileScanner {
         let results: Vec<_> = entries
             .par_iter()
             .map(|entry| {
+                let res = self.process_file_metadata(entry);
                 if let Some(pb) = &self.progress_bar {
+                    // Count completed files, not scheduled files, so progress reflects real work.
                     pb.inc(1);
                 }
-                self.process_file(entry)
+                res
             })
             .collect();
 
-        let file_infos: Vec<_> = match results.into_iter().collect::<Result<Vec<_>>>() {
+        let candidates: Vec<_> = match results.into_iter().collect::<Result<Vec<_>>>() {
             Ok(v) => v,
             Err(e) => {
                 crate::log::log_error(&format!("File processing error: {}", e));
@@ -139,15 +156,70 @@ impl FileScanner {
             }
         }
 
-        // Group duplicates
+        let use_hashes = self.config.compare_by_md5 || self.config.compare_by_sha512 || self.config.compare_by_xxh3;
+
+        // Pre-group using cheap criteria (+ size gate when hashes are enabled).
+        // This avoids hashing files that cannot possibly be duplicates.
+        let mut pre_groups: HashMap<PreGroupKey, Vec<CandidateFile>> = HashMap::new();
+        for candidate in candidates {
+            let pre_key = PreGroupKey {
+                base_key: candidate.base_key.clone(),
+                size_gate: if use_hashes { Some(candidate.size) } else { None },
+            };
+            pre_groups.entry(pre_key).or_default().push(candidate);
+        }
+
+        // Final grouping with hashes (lazy: only inside pre-groups that have >1 files).
         crate::log::log_debug(&format!(
-            "Grouped {} files into unique keys, filtering duplicates",
-            file_infos.len()
+            "Grouped files into {} pre-keys; building final duplicate keys",
+            pre_groups.len()
         ));
         let mut groups: HashMap<CheckOptions, Vec<PathBuf>> = HashMap::new();
 
-        for (key, path) in file_infos {
-            groups.entry(key).or_default().push(path);
+        let buf_size = self
+            .config
+            .hash_buffer_size
+            .try_into()
+            .unwrap_or(usize::MAX)
+            .max(256);
+
+        for (_pre_key, files) in pre_groups {
+            // No need to hash singleton pre-groups.
+            if use_hashes && files.len() <= 1 {
+                continue;
+            }
+
+            for candidate in files {
+                let mut key = candidate.base_key;
+                if self.config.compare_by_md5 {
+                    key.md5 = Some(self.get_or_compute_hash(
+                        &candidate.path,
+                        candidate.size,
+                        candidate.mtime,
+                        "md5",
+                        buf_size,
+                    )?);
+                }
+                if self.config.compare_by_sha512 {
+                    key.sha512 = Some(self.get_or_compute_hash(
+                        &candidate.path,
+                        candidate.size,
+                        candidate.mtime,
+                        "sha512",
+                        buf_size,
+                    )?);
+                }
+                if self.config.compare_by_xxh3 {
+                    key.xxh3 = Some(self.get_or_compute_hash(
+                        &candidate.path,
+                        candidate.size,
+                        candidate.mtime,
+                        "xxh3",
+                        buf_size,
+                    )?);
+                }
+                groups.entry(key).or_default().push(candidate.path);
+            }
         }
 
         // Filter groups with duplicates; when search_dirs is set, only keep groups that have at least one file in search_dirs
@@ -192,7 +264,8 @@ impl FileScanner {
     }
 
     /// Returns Ok(Some(...)) to include, Ok(None) if filtered out, Err for real errors.
-    fn process_file(&self, entry: &walkdir::DirEntry) -> Result<Option<(CheckOptions, PathBuf)>> {
+    /// This stage only collects cheap metadata and non-hash key parts.
+    fn process_file_metadata(&self, entry: &walkdir::DirEntry) -> Result<Option<CandidateFile>> {
         let path = entry.path().to_path_buf();
 
         if self.config.verbose > 2 {
@@ -241,52 +314,31 @@ impl FileScanner {
             }
         }
 
-        // Build key based on enabled comparison criteria
-        let mut key = CheckOptions::new();
+        // Build base key based on enabled non-hash comparison criteria.
+        let mut base_key = CheckOptions::new();
 
         if self.config.compare_by_name {
-            key.name = Some(entry.file_name().to_string_lossy().to_string());
+            base_key.name = Some(entry.file_name().to_string_lossy().to_string());
         }
 
         if self.config.compare_by_size {
-            key.size = Some(metadata.len());
+            base_key.size = Some(metadata.len());
         }
 
         if self.config.compare_by_created {
-            key.created = metadata.created().ok();
+            base_key.created = metadata.created().ok();
         }
 
         if self.config.compare_by_modified {
-            key.modified = metadata.modified().ok();
+            base_key.modified = metadata.modified().ok();
         }
 
-        // Calculate hashes if needed (use cache when enabled)
-        let buf_size = self
-            .config
-            .hash_buffer_size
-            .try_into()
-            .unwrap_or(usize::MAX)
-            .max(256);
-        let mtime = metadata.modified().ok();
-        let size = metadata.len();
-
-        key.md5 = if self.config.compare_by_md5 {
-            Some(self.get_or_compute_hash(&path, size, mtime, "md5", buf_size)?)
-        } else {
-            None
-        };
-        key.sha512 = if self.config.compare_by_sha512 {
-            Some(self.get_or_compute_hash(&path, size, mtime, "sha512", buf_size)?)
-        } else {
-            None
-        };
-        key.xxh3 = if self.config.compare_by_xxh3 {
-            Some(self.get_or_compute_hash(&path, size, mtime, "xxh3", buf_size)?)
-        } else {
-            None
-        };
-
-        Ok(Some((key, path)))
+        Ok(Some(CandidateFile {
+            path,
+            base_key,
+            size: metadata.len(),
+            mtime: metadata.modified().ok(),
+        }))
     }
 
     fn get_or_compute_hash(

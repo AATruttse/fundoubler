@@ -921,6 +921,44 @@ fn test_scanner_with_hash_cache() {
 }
 
 #[test]
+fn test_hashing_is_skipped_when_sizes_are_unique() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let cache_dir = temp_dir.path().join("cache");
+
+    // All sizes are unique, so no pair can match by content.
+    std::fs::write(temp_dir.path().join("a.bin"), "a").unwrap(); // 1 byte
+    std::fs::write(temp_dir.path().join("b.bin"), "bb").unwrap(); // 2 bytes
+    std::fs::write(temp_dir.path().join("c.bin"), "ccc").unwrap(); // 3 bytes
+
+    let mut config = ConfigFile::default();
+    config.path_start = temp_dir.path().to_path_buf();
+    config.compare_by_size = false;
+    config.compare_by_md5 = true;
+    config.compare_by_xxh3 = false;
+    config.compare_by_sha512 = false;
+    config.hash_cache = true;
+    config.hash_cache_dir = cache_dir.clone();
+
+    let scanner = FileScanner::new(&config, false);
+    let groups = scanner.scan().unwrap();
+    assert!(groups.is_empty());
+
+    // No hashes should be computed/cached when no same-size candidates exist.
+    let cache_json = std::fs::read_to_string(cache_dir.join("cache.json")).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&cache_json).unwrap();
+    let entries = parsed
+        .get("entries")
+        .and_then(|v| v.as_object())
+        .cloned()
+        .unwrap_or_default();
+    assert!(
+        entries.is_empty(),
+        "expected empty hash cache for unique-size dataset, got {} entries",
+        entries.len()
+    );
+}
+
+#[test]
 fn test_hash_cache_invalid_json_loads_empty() {
     use std::path::Path;
 
